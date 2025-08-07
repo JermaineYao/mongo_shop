@@ -1,0 +1,28 @@
+@mixin flex($ff, $w, $j, $a, $g: 0) {
+  display: flex;
+  align-items: $a;
+  flex-flow: $ff $w;
+  justify-content: $j;
+  gap: $g;
+}
+
+@mixin center {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin center-c {
+  display: flex;
+  flex-flow: column nowrap;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin left {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-start;
+}

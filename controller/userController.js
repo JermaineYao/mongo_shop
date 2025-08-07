@@ -1,0 +1,692 @@
+const { promisify } = require('util')
+const jwt = require('jsonwebtoken')
+const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
+
+const { collection, collectionExists, DB } = require('../utils/db')
+
+const Email = require('../utils/email')
+
+const { userJsonSchema } = require('../schema/user/mongoSchema.js')
+const {
+  createUserSchema,
+  checkUserSchema,
+  updateUserSchema,
+  checkPWDFromUrlUserSchema,
+  userPhotoSchema
+} = require('../schema/user/zodSchema.js')
+
+const {
+  formatDateTimeTW,
+  getTaiwanTimestamp,
+  validateObjectId,
+  renameId
+} = require('../utils/utils.js')
+const { catchError } = require('../utils/catchError')
+
+/*============= 註冊 =============*/
+// 註冊(前台)
+exports.signup = catchError(async (req, res, next) => {
+  await checkOrCreateUser('create', 'front', req, res)
+})
+
+// 註冊(前台)
+exports.signupAdmin = catchError(async (req, res, next) => {
+  await checkOrCreateUser('create', 'admin', req, res)
+})
+
+// 檢查 帳號 或 EMAIL 是否已被使用 (前台)
+exports.checkIfAccountExists = catchError(async (req, res, next) => {
+  const result = await checkOrCreateUser('check', 'front', req, res)
+  res.status(result.code || 200).json(result)
+})
+
+// 檢查 帳號 或 EMAIL 是否已被使用 (後台)
+exports.checkIfAccountAdminExists = catchError(async (req, res, next) => {
+  const result = await checkOrCreateUser('check', 'admin', req, res)
+  res.status(result.code || 200).json(result)
+})
+
+// 建立 user schema 驗證規則
+async function setUserValidator() {
+  const db = DB()
+
+  await db.createCollection('users', {
+    validator: userJsonSchema
+  })
+
+  await db
+    .collection('users')
+    .createIndex({ account: 1, role: 1 }, { unique: true })
+
+  await db
+    .collection('users')
+    .createIndex({ email: 1, role: 1 }, { unique: true })
+}
+
+// 統一處理註冊與帳號檢查
+async function checkOrCreateUser(mode, reqFrom, req, res) {
+  const role = reqFrom === 'admin' ? 'admin' : 'user'
+  const UsersExist = await collectionExists('users')
+  if (!UsersExist) {
+    if (mode === 'check') return { status: 'success', msg: '可使用' }
+    await setUserValidator()
+  }
+
+  const schema = mode === 'create' ? createUserSchema : checkUserSchema
+  const parsed = schema.safeParse(req.body)
+
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map((err) => ({
+      field: err.path.join('.'),
+      message: err.message
+    }))
+
+    return res.status(400).json({
+      status: 'failed',
+      msg: '欄位驗證錯誤',
+      errors
+    })
+  }
+
+  const { account, email, pwd, phoneNumber, address } = parsed.data
+
+  const Users = collection('users')
+
+  const [userByAccount, userByEmail] = await Promise.all([
+    Users.findOne({ account, role }),
+    Users.findOne({ email, role })
+  ])
+
+  if (userByAccount || userByEmail) {
+    if (mode === 'check') {
+      return { status: 'failed', msg: '帳號或密碼已被使用', code: 409 }
+    } else {
+      return res
+        .status(409)
+        .json({ status: 'failed', msg: '帳號或密碼已被使用' })
+    }
+  }
+
+  if (mode === 'check') return { status: 'success', msg: '可使用' }
+
+  // 寫入資料庫
+  const pwdHashed = await bcrypt.hash(pwd, 12)
+  const now = formatDateTimeTW()
+
+  const result = await Users.insertOne({
+    account,
+    email,
+    role,
+    active: true,
+    photo: {
+      createAt: null,
+      fileKey: null,
+      url: null
+    },
+    phoneNumber,
+    address,
+    pwd: pwdHashed,
+    createAt: now,
+    pwdChangeAt: now,
+    modifiedAt: null,
+    disabledAt: null,
+    pwdResetToken: null,
+    pwdResetExpires: null
+  })
+
+  if (!result.acknowledged) {
+    return res.status(500).json({
+      status: 'failed',
+      msg: '用戶新增失敗，請稍後再試'
+    })
+  }
+
+  return res.status(201).json({
+    status: 'success',
+    msg: '註冊成功'
+    // data: { insertedId: result.insertedId }
+  })
+}
+
+/*============= 查詢帳號 =============*/
+// 查詢我的帳號(前台)
+exports.myAccount = catchError(async (req, res, next) => {
+  await queryAccount(req, res)
+})
+
+// 查詢 user (後台)
+exports.findUserAdmin = catchError(async (req, res, next) => {
+  await queryAccount(req, res, 'admin')
+})
+
+async function queryAccount(req, res, reqFrom = 'front') {
+  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+  const id = validateObjectId(reqId, res)
+
+  const Users = collection('users')
+  const user = await Users.findOne(
+    { _id: id },
+    {
+      projection: {
+        pwd: 0,
+        createAt: 0,
+        pwdChangeAt: 0
+      }
+    }
+  )
+
+  if (!user) {
+    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
+  }
+
+  const data = renameId('userId', user)
+  return res.status(200).json({ status: 'success', msg: '查詢成功', data })
+}
+
+/*============= 停用,啟用 帳號 =============*/
+// 停用,啟用 帳號 (前台)
+exports.enableSwitchUser = catchError(async (req, res, next) => {
+  await enableSwitchUserHandler(req, res)
+})
+
+// 停用,啟用 帳號 (後台)
+exports.enableSwitchUserAdmin = catchError(async (req, res, next) => {
+  await enableSwitchUserHandler(req, res, 'admin')
+})
+
+async function enableSwitchUserHandler(req, res, reqFrom = 'front') {
+  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+  const id = validateObjectId(reqId, res)
+
+  const enable = req.body.enable ? req.body.enable : false
+
+  const Users = collection('users')
+  const now = formatDateTimeTW()
+  const user = await Users.findOneAndUpdate(
+    { _id: id },
+    { $set: { active: enable, disabledAt: enable ? null : now } },
+    {
+      projection: {
+        pwd: 0,
+        createAt: 0,
+        pwdChangeAt: 0
+      },
+      returnDocument: 'after'
+    }
+  )
+
+  if (!user) {
+    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
+  }
+
+  const msg = enable ? '啟用成功' : '已停用'
+
+  const data = renameId('userId', user)
+  return res.status(200).json({ status: 'success', msg, data })
+}
+
+/*============= user 照片 =============*/
+const Bucket = process.env.s3_BUCKET_NAME
+const region = process.env.S3_REGION
+
+exports.updateUserPhoto = catchError(async (req, res, next) => {
+  await updateUserPhotoObj(req, res)
+})
+
+async function updateUserPhotoObj(req, res, reqFrom = 'front') {
+  const parsed = userPhotoSchema.safeParse(req.body)
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map((err) => ({
+      field: err.path.join('.'),
+      message: err.message
+    }))
+    return res
+      .status(400)
+      .json({ status: 'failed', msg: '欄位驗證錯誤', errors })
+  }
+
+  // 更新
+  const fileKey = req.body.fileKey
+  const updateContent = {
+    photo: {
+      createAt: formatDateTimeTW(),
+      fileKey: fileKey,
+      url: `https://${Bucket}.s3.${region}.amazonaws.com/${fileKey}`
+    }
+  }
+
+  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+  const id = validateObjectId(reqId, res)
+
+  const Users = collection('users')
+  const user = await Users.findOne({ _id: id }, { projection: { pwd: 0 } })
+  if (!user) {
+    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
+  }
+
+  const userUpdated = await Users.findOneAndUpdate(
+    { _id: id },
+    { $set: updateContent },
+    {
+      projection: {
+        photo: 1
+      },
+      returnDocument: 'after'
+    }
+  )
+  const data = renameId('userId', userUpdated)
+
+  if (!userUpdated) {
+    return res.status(404).json({ status: 'failed', msg: '照片更新失敗' })
+  }
+
+  // 刪除 user 原有的圖片
+  const toBeDeleted = user.photo.fileKey
+
+  if (!toBeDeleted) {
+    return res.status(200).json({
+      status: 'success',
+      mas: '上傳照片完成',
+      data
+    })
+  }
+
+  try {
+    const toBeDeletedData = {
+      Bucket,
+      Key: toBeDeleted
+    }
+
+    const s3 = setS3()
+    await s3.deleteObject(toBeDeletedData).promise()
+
+    return res.status(200).json({
+      status: 'success',
+      msg: '上傳並刪除舊照片成功',
+      data
+    })
+  } catch (err) {
+    return res.status(200).json({
+      status: 'success',
+      msg: '上傳成功，但刪除舊照片失敗',
+      data,
+      deleteError: err.message
+    })
+  }
+}
+
+/*============= 更新 user =============*/
+// 更新 user (地址, 電話) - 前台
+exports.updateUser = catchError(async (req, res, next) => {
+  await updateUserHandler(req, res)
+})
+
+// 更新 user (地址, 電話) - 後台
+exports.updateUserAdmin = catchError(async (req, res, next) => {
+  await updateUserHandler(req, res, 'admin')
+})
+
+async function updateUserHandler(req, res, reqFrom = 'front') {
+  const parsed = updateUserSchema.safeParse(req.body)
+
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map((err) => ({
+      field: err.path.join('.'),
+      message: err.message
+    }))
+
+    return res.status(400).json({
+      status: 'failed',
+      msg: '欄位驗證錯誤',
+      errors
+    })
+  }
+  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+  const id = validateObjectId(reqId, res)
+
+  const Users = collection('users')
+  const user = await Users.findOne(
+    { _id: id },
+    { projection: { address: 1, phoneNumber: 1 } }
+  )
+
+  if (!user) {
+    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
+  }
+
+  const updateData = {
+    modifiedAt: formatDateTimeTW()
+  }
+
+  const { address, phoneNumber } = req.body
+
+  if ('phoneNumber' in req.body && phoneNumber !== user.phoneNumber) {
+    updateData.phoneNumber = phoneNumber
+  }
+
+  if ('address' in req.body && address !== user.address) {
+    updateData.address = address
+  }
+
+  const userUpdated = await Users.findOneAndUpdate(
+    { _id: id },
+    { $set: updateData },
+    {
+      projection: {
+        pwd: 0,
+        createAt: 0,
+        pwdChangeAt: 0
+      },
+      returnDocument: 'after'
+    }
+  )
+
+  if (!userUpdated) {
+    return res.status(404).json({ status: 'failed', msg: '更新失敗' })
+  }
+
+  const data = renameId('userId', userUpdated)
+  return res.status(200).json({ status: 'success', msg: '更新成功', data })
+}
+
+/*============= 登出 登入 =============*/
+// 登出(前台)
+exports.signout = catchError(async (req, res, next) => {
+  logout(req, res)
+})
+
+// 登出 (後台)
+exports.signoutAdmin = catchError(async (req, res, next) => {
+  logout(req, res, 'admin')
+})
+
+function logout(req, res, reqFrom = 'front') {
+  const jwtName = reqFrom === 'front' ? 'shop-jwt' : 'shop-admin-jwt'
+  const jwtOut = reqFrom === 'front' ? 'logout-jwt' : 'logout-admin-jwt'
+
+  const expiresDate = new Date(getTaiwanTimestamp() + 0.5 * 1000)
+
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
+
+  res.cookie(jwtName, jwtOut, {
+    expires: expiresDate,
+    secure: isSecure, // 僅在 HTTPS 下設為 true
+    sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
+    httpOnly: true
+  })
+
+  return res.status(200).json({
+    status: 'success',
+    msg: '已登出'
+  })
+}
+
+// 登入(前台)
+exports.signIn = catchError(async (req, res, next) => {
+  await login(req, res)
+})
+
+// 登入(後台)
+exports.signInAdmin = catchError(async (req, res, next) => {
+  await login(req, res, 'admin')
+})
+
+async function login(req, res, reqFrom = 'front') {
+  const { account, pwd } = req.body
+
+  if (!account || !pwd) {
+    return res.status(400).json({
+      status: 'failed',
+      msg: '需要帳號,密碼'
+    })
+  }
+
+  const Users = collection('users')
+  const user = await Users.findOne(
+    { account },
+    { projection: { _id: 1, role: 1, pwd: 1 } }
+  )
+  if (!user) {
+    return res.status(401).json({ status: 'failed', msg: '帳號或密碼錯誤' })
+  }
+
+  const checkPWD = await comparePWD(pwd, user.pwd)
+
+  if (!checkPWD) {
+    return res.status(401).json({ status: 'failed', msg: '帳號或密碼錯誤' })
+  }
+
+  setTokenInCookie(req, res, user, 200, '登入成功', reqFrom)
+}
+
+// 建立 jwt 簽章
+function getJWT(id) {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN
+  })
+}
+
+// 送出 token 並存於客戶端的 cookie
+function setTokenInCookie(req, res, user, statusCode, msg, reqFrom = 'front') {
+  const token = getJWT(user._id)
+
+  const expiresInDays = 60
+  const msInOneDay = 24 * 60 * 60 * 1000
+  const expiresDate = new Date(
+    getTaiwanTimestamp() + expiresInDays * msInOneDay
+  )
+
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
+
+  // 防止 CROSS-SITE SCRIPTING (XSS) 攻擊
+  const cookieOption = {
+    expires: expiresDate,
+    secure: isSecure, // 僅在 HTTPS 下設為 true
+    sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
+    httpOnly: true
+  }
+
+  const jwtName = reqFrom === 'front' ? 'shop-jwt' : 'shop-admin-jwt'
+  res.cookie(jwtName, token, cookieOption)
+
+  return res.status(statusCode).json({
+    status: 'success',
+    msg
+  })
+}
+
+// 檢查密碼是否相同
+async function comparePWD(pwdA, pwdB) {
+  return bcrypt.compare(pwdA, pwdB)
+}
+
+// 是否為登入狀態 (前台)
+exports.isLogin = catchError(async (req, res, next) => {
+  await loginCheck(req, res)
+})
+
+// 是否為登入狀態 (後台)
+exports.isLoginAdmin = catchError(async (req, res, next) => {
+  await loginCheck(req, res, 'admin')
+})
+
+async function loginCheck(req, res, reqFrom = 'front') {
+  const jwtName = reqFrom === 'front' ? 'shop-jwt' : 'shop-admin-jwt'
+  const jwtCookie = req.cookies[`${jwtName}`]
+
+  if (jwtCookie) {
+    const decoded = await promisify(jwt.verify)(
+      jwtCookie,
+      process.env.JWT_SECRET
+    )
+
+    const id = validateObjectId(decoded.id)
+    const Users = collection('users')
+
+    const user = await Users.findOne({ _id: id }, { projection: { pwd: 0 } })
+
+    if (!user) {
+      logout(req, res, reqFrom)
+
+      return
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      msg: '驗證通過'
+      // data: user
+    })
+  }
+
+  return res.status(401).json({
+    status: 'failed',
+    msg: '用戶未登入'
+  })
+}
+
+/*============= 密碼 =============*/
+// 忘記密碼 - 設定新密碼 (前台)
+exports.resetPWD = catchError(async (req, res, next) => {
+  await setNewPWDFromUrl(req, res)
+})
+
+// 忘記密碼 - 設定新密碼 (後台)
+exports.resetPWDAdmin = catchError(async (req, res, next) => {
+  await setNewPWDFromUrl(req, res, 'admin')
+})
+
+async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
+  const parsed = checkPWDFromUrlUserSchema.safeParse(req.body)
+
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map((err) => ({
+      field: err.path.join('.'),
+      message: err.message
+    }))
+
+    return res.status(400).json({
+      status: 'failed',
+      msg: '欄位驗證錯誤',
+      errors
+    })
+  }
+
+  const { token, newPWD } = req.body
+  const role = reqFrom === 'front' ? 'user' : 'admin'
+
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
+  const now = new Date(getTaiwanTimestamp())
+  const pwdHashed = await bcrypt.hash(newPWD, 12)
+
+  const Users = collection('users')
+
+  const userUpdated = await Users.findOneAndUpdate(
+    {
+      pwdResetToken: hashedToken,
+      pwdResetExpires: {
+        $gte: now
+      },
+      role
+    },
+    {
+      $set: {
+        pwd: pwdHashed,
+        pwdChangeAt: formatDateTimeTW(),
+        pwdResetToken: null,
+        pwdResetExpires: null
+      }
+    },
+    {
+      projection: { pwd: 0 },
+      returnDocument: 'after'
+    }
+  )
+
+  if (!userUpdated) {
+    return res.status(400).json({
+      status: 'failed',
+      msg: '連結已失效或無效，請重新申請密碼重設'
+    })
+  }
+
+  setTokenInCookie(req, res, userUpdated, 200, '密碼已修改', reqFrom)
+}
+
+// 忘記密碼(發送密碼設定連結至用戶信箱) - 前台
+exports.forgotPWD = catchError(async (req, res, next) => {
+  await sendEmailToResetPWD(req, res, 'front')
+})
+
+// 忘記密碼(發送密碼設定連結至用戶信箱) - 後台
+exports.forgotPWDAdmin = catchError(async (req, res, next) => {
+  await sendEmailToResetPWD(req, res, 'admin')
+})
+
+async function sendEmailToResetPWD(req, res, next, reqFrom = 'front') {
+  const { email, routeWithHash } = req.body
+  const Users = collection('users')
+
+  const user = await Users.findOne({ email })
+
+  if (!user) {
+    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
+  }
+
+  const { randomToken, pwdResetToken, pwdResetExpires } =
+    createTokenForPwdReset()
+
+  const role = reqFrom === 'front' ? 'user' : 'admin'
+  const userUpdated = await Users.findOneAndUpdate(
+    { email, role },
+    { $set: { pwdResetToken, pwdResetExpires } },
+    {
+      projection: {
+        pwd: 0,
+        createAt: 0,
+        pwdChangeAt: 0
+      },
+      returnDocument: 'after'
+    }
+  )
+
+  if (!userUpdated) {
+    return res
+      .status(500)
+      .json({ status: 'failed', msg: '密碼重設處理失敗，請稍後再試' })
+  }
+
+  const subject = '請在 10分鐘內點擊連結, 並完成密碼設定'
+  const resetURL = routeWithHash
+    ? `${req.get('origin')}/#/set_pwd/${randomToken}`
+    : `${req.get('origin')}/set_pwd/${randomToken}`
+
+  try {
+    await new Email(userUpdated, resetURL).send('forgotPassword', subject)
+
+    return res.status(200).json({ status: 'success', msg: '已發送至信箱' })
+  } catch (err) {
+    await Users.findOneAndUpdate(
+      { email, role },
+      { $set: { pwdResetToken: null, pwdResetExpires: null } }
+    )
+
+    return res
+      .status(500)
+      .json({ status: 'failed', msg: '送信箱出現錯誤, 請再請求發送一次' })
+  }
+}
+
+// 忘記密碼, 確認此帳號已存在後送出隨機的 token 給客戶端, 並設定有效時間
+function createTokenForPwdReset() {
+  const randomToken = crypto.randomBytes(32).toString('hex')
+  const pwdResetToken = crypto
+    .createHash('sha256')
+    .update(randomToken)
+    .digest('hex')
+
+  const expiresPeriod = 10 * 60 * 1000
+  const pwdResetExpires = new Date(getTaiwanTimestamp() + expiresPeriod)
+
+  return { randomToken, pwdResetToken, pwdResetExpires }
+}
