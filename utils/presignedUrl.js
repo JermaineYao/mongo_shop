@@ -4,18 +4,19 @@ const { setS3 } = require('../utils/s3')
 
 class SetContent {
   /*
-    target = 'mainPhoto', 'subPhoto', 'user'
+    target = 'mainPhoto', 'subPhoto', 'userPhoto'
 
     query = {
       fileType,
       id
     }
     fileTypes = ['jpg', 'png', 'jpeg', 'gif']
-    id = userId or productId
+    prefixId = userId or productId
   */
-  constructor(target, query) {
+  constructor(target, prefixId, fileType) {
     this.target = target
-    this.query = query
+    this.fileType = fileType
+    this.prefixId = prefixId
     this.fileKey = ''
     this.url = ''
   }
@@ -27,19 +28,19 @@ class SetContent {
     // 動態組出 S3 路徑
     let prefix
     if (this.target === 'mainPhoto' || this.target === 'subPhoto') {
-      prefix = `product/${this.query.id}`
-    } else if (this.target === 'user') {
-      prefix = `user/${this.query.id}`
+      prefix = `product/${this.prefixId}`
+    } else if (this.target === 'userPhoto') {
+      prefix = `user/${this.prefixId}`
     } else {
       throw new AppError('未知的圖片類型', 400)
     }
 
-    const fileKey = `${prefix}/${uuidv1()}.${this.query.fileType}`
+    const fileKey = `${prefix}/${uuidv1()}.${this.fileType}`
 
     const params = {
       Bucket,
       Key: fileKey,
-      ContentType: `image/${this.query.fileType}`
+      ContentType: `image/${this.fileType}`
     }
 
     const url = await s3.getSignedUrlPromise('putObject', params)

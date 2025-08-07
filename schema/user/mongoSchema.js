@@ -22,7 +22,7 @@ exports.userJsonSchema = {
       photo: {
         bsonType: 'object',
         properties: {
-          createAt: { bsonType: ['date', 'null'] },
+          createAt: { bsonType: ['string', 'null'] },
           fileKey: { bsonType: ['string', 'null'] },
           url: { bsonType: ['string', 'null'] }
         },

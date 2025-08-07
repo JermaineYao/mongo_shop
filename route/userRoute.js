@@ -1,4 +1,5 @@
 const express = require('express')
+const multer = require('multer')
 const user = require('../controller/userController')
 
 const {
@@ -62,6 +63,15 @@ router.post('/update_user_info', routerGuard, user.updateUser)
 // 更新 user (地址, 電話)(後台)
 router.post('/update_user_info_admin', routerGuardAdmin, user.updateUserAdmin)
 
-// 新增, 更新照片(前台)
+const upload = multer().any()
+// 上傳,更新照片 (前台)
+router.post('/upload_user_photo', upload, routerGuard, user.updateUserPhoto)
+// 上傳,更新照片 (後台)
+router.post(
+  '/upload_user_photo_admin',
+  upload,
+  routerGuardAdmin,
+  user.updateUserPhotoAdmin
+)
 
 module.exports = router

@@ -4,17 +4,25 @@ const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 
 const { collection, collectionExists, DB } = require('../utils/db')
-
 const Email = require('../utils/email')
+const {
+  uploadFileToAWS,
+  deleteFileFromAWS,
+  getAWSImageUrl
+} = require('../utils/aws')
 
-const { userJsonSchema } = require('../schema/user/mongoSchema.js')
+const { userJsonSchema } = require('../schema/user/mongoSchema')
 const {
   createUserSchema,
   checkUserSchema,
   updateUserSchema,
-  checkPWDFromUrlUserSchema,
-  userPhotoSchema
-} = require('../schema/user/zodSchema.js')
+  checkPWDFromUrlUserSchema
+} = require('../schema/user/zodSchema')
+const {
+  checkUploadPhotoSchema,
+  checkFileToBeUploaded
+} = require('../schema/photo/zodSchema')
+const { schemaValidator } = require('../utils/schemaValidator')
 
 const {
   formatDateTimeTW,
@@ -74,22 +82,10 @@ async function checkOrCreateUser(mode, reqFrom, req, res) {
   }
 
   const schema = mode === 'create' ? createUserSchema : checkUserSchema
-  const parsed = schema.safeParse(req.body)
+  const parsedData = schemaValidator(res, schema, req.body)
+  if (!parsedData) return
 
-  if (!parsed.success) {
-    const errors = parsed.error.issues.map((err) => ({
-      field: err.path.join('.'),
-      message: err.message
-    }))
-
-    return res.status(400).json({
-      status: 'failed',
-      msg: '欄位驗證錯誤',
-      errors
-    })
-  }
-
-  const { account, email, pwd, phoneNumber, address } = parsed.data
+  const { account, email, pwd, phoneNumber, address } = parsedData
 
   const Users = collection('users')
 
@@ -227,46 +223,57 @@ async function enableSwitchUserHandler(req, res, reqFrom = 'front') {
 }
 
 /*============= user 照片 =============*/
-const Bucket = process.env.s3_BUCKET_NAME
-const region = process.env.S3_REGION
-
+// 上傳,更新照片 (前台)
 exports.updateUserPhoto = catchError(async (req, res, next) => {
   await updateUserPhotoObj(req, res)
 })
 
-async function updateUserPhotoObj(req, res, reqFrom = 'front') {
-  const parsed = userPhotoSchema.safeParse(req.body)
-  if (!parsed.success) {
-    const errors = parsed.error.issues.map((err) => ({
-      field: err.path.join('.'),
-      message: err.message
-    }))
-    return res
-      .status(400)
-      .json({ status: 'failed', msg: '欄位驗證錯誤', errors })
-  }
+// 上傳,更新照片 (後台)
+exports.updateUserPhotoAdmin = catchError(async (req, res, next) => {
+  await updateUserPhotoObj(req, res, 'admin')
+})
 
-  // 更新
-  const fileKey = req.body.fileKey
+/*
+  res.body: target,
+  req: file
+*/
+async function updateUserPhotoObj(req, res, reqFrom = 'front') {
+  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+  const userId = validateObjectId(reqId, res)
+
+  const parsedData = schemaValidator(res, checkUploadPhotoSchema, req.body)
+  if (!parsedData) return
+  const { target } = parsedData
+
+  const { checkFileResult, fileType, file } = checkFileToBeUploaded(req, res)
+  if (!checkFileResult) return
+
+  // 透過後端取得 persignedUrl, 然後上傳檔案至 S3
+  const { uploadResult, fileKey } = await uploadFileToAWS(res, {
+    target,
+    prefixId: userId,
+    fileType,
+    file
+  })
+  if (!uploadResult) return
+
+  // 更新 user 文檔
   const updateContent = {
     photo: {
       createAt: formatDateTimeTW(),
-      fileKey: fileKey,
-      url: `https://${Bucket}.s3.${region}.amazonaws.com/${fileKey}`
+      fileKey,
+      url: getAWSImageUrl(fileKey)
     }
   }
 
-  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
-  const id = validateObjectId(reqId, res)
-
   const Users = collection('users')
-  const user = await Users.findOne({ _id: id }, { projection: { pwd: 0 } })
+  const user = await Users.findOne({ _id: userId }, { projection: { pwd: 0 } })
   if (!user) {
     return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
   }
 
   const userUpdated = await Users.findOneAndUpdate(
-    { _id: id },
+    { _id: userId },
     { $set: updateContent },
     {
       projection: {
@@ -292,28 +299,22 @@ async function updateUserPhotoObj(req, res, reqFrom = 'front') {
     })
   }
 
-  try {
-    const toBeDeletedData = {
-      Bucket,
-      Key: toBeDeleted
-    }
+  const { deleteResult, errMsg } = await deleteFileFromAWS(toBeDeleted)
 
-    const s3 = setS3()
-    await s3.deleteObject(toBeDeletedData).promise()
-
-    return res.status(200).json({
-      status: 'success',
-      msg: '上傳並刪除舊照片成功',
-      data
-    })
-  } catch (err) {
+  if (!deleteResult) {
     return res.status(200).json({
       status: 'success',
       msg: '上傳成功，但刪除舊照片失敗',
       data,
-      deleteError: err.message
+      deleteError: errMsg
     })
   }
+
+  return res.status(200).json({
+    status: 'success',
+    msg: '上傳照片成功',
+    data
+  })
 }
 
 /*============= 更新 user =============*/
@@ -557,22 +558,10 @@ exports.resetPWDAdmin = catchError(async (req, res, next) => {
 })
 
 async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
-  const parsed = checkPWDFromUrlUserSchema.safeParse(req.body)
+  const parsedData = schemaValidator(res, checkPWDFromUrlUserSchema, req.body)
+  if (!parsedData) return
 
-  if (!parsed.success) {
-    const errors = parsed.error.issues.map((err) => ({
-      field: err.path.join('.'),
-      message: err.message
-    }))
-
-    return res.status(400).json({
-      status: 'failed',
-      msg: '欄位驗證錯誤',
-      errors
-    })
-  }
-
-  const { token, newPWD } = req.body
+  const { token, newPWD } = parsedData
   const role = reqFrom === 'front' ? 'user' : 'admin'
 
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
