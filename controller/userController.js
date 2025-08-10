@@ -15,7 +15,9 @@ const { userJsonSchema } = require('../schema/user/mongoSchema')
 const {
   createUserSchema,
   checkUserSchema,
+  loginSchema,
   updateUserSchema,
+  forgotPWDSchema,
   checkPWDFromUrlUserSchema
 } = require('../schema/user/zodSchema')
 const {
@@ -312,8 +314,85 @@ async function updateUserPhotoObj(req, res, reqFrom = 'front') {
 
   return res.status(200).json({
     status: 'success',
-    msg: '上傳照片成功',
+    msg: '上傳照片完成',
     data
+  })
+}
+
+// 刪除照片(前台)
+exports.deleteUserPhoto = catchError(async (req, res, next) => {
+  await deleteUserPhotoObj(req, res)
+})
+
+// 刪除照片(後台)
+exports.deleteUserPhotoAdmin = catchError(async (req, res, next) => {
+  await deleteUserPhotoObj(req, res, 'admin')
+})
+
+async function deleteUserPhotoObj(req, res, reqFrom = 'front') {
+  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+  const userId = validateObjectId(reqId, res)
+
+  const Users = collection('users')
+  const user = await Users.findOne(
+    { _id: userId },
+    { projection: { photo: 1 } }
+  )
+  if (!user) {
+    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
+  }
+
+  // 刪除 user 原有的圖片
+  const toBeDeleted = user.photo?.fileKey
+
+  if (!toBeDeleted) {
+    return res.status(404).json({
+      status: 'success',
+      msg: '沒有照片'
+    })
+  }
+
+  const { deleteResult, errMsg } = await deleteFileFromAWS(toBeDeleted)
+  if (!deleteResult) {
+    return res.status(200).json({
+      status: 'success',
+      msg: 'S3 刪除照片失敗',
+      deleteError: errMsg
+    })
+  }
+
+  const deleteCondition = {
+    photo: {
+      createAt: null,
+      fileKey: null,
+      url: null
+    }
+  }
+  const deletedPhotoResult = await Users.updateOne(
+    { _id: userId },
+    {
+      $set: deleteCondition
+    }
+  )
+
+  if (deletedPhotoResult.matchedCount === 0) {
+    return res.status(404).json({
+      status: 'failed',
+      msg: '找不到用戶'
+    })
+  }
+
+  if (deletedPhotoResult.modifiedCount === 0) {
+    return res.status(202).json({
+      status: 'success',
+      msg: '資料無變動（可能已為空）'
+    })
+  }
+
+  return res.status(200).json({
+    status: 'success',
+    msg: '已刪除照片',
+    data: deleteCondition
   })
 }
 
@@ -434,7 +513,11 @@ exports.signInAdmin = catchError(async (req, res, next) => {
 })
 
 async function login(req, res, reqFrom = 'front') {
+  const parsedData = schemaValidator(res, loginSchema, req.body)
+  if (!parsedData) return
+
   const { account, pwd } = req.body
+  const role = reqFrom === 'front' ? 'user' : 'admin'
 
   if (!account || !pwd) {
     return res.status(400).json({
@@ -445,15 +528,15 @@ async function login(req, res, reqFrom = 'front') {
 
   const Users = collection('users')
   const user = await Users.findOne(
-    { account },
+    { account, role },
     { projection: { _id: 1, role: 1, pwd: 1 } }
   )
+
   if (!user) {
     return res.status(401).json({ status: 'failed', msg: '帳號或密碼錯誤' })
   }
 
   const checkPWD = await comparePWD(pwd, user.pwd)
-
   if (!checkPWD) {
     return res.status(401).json({ status: 'failed', msg: '帳號或密碼錯誤' })
   }
@@ -613,10 +696,15 @@ exports.forgotPWDAdmin = catchError(async (req, res, next) => {
 })
 
 async function sendEmailToResetPWD(req, res, next, reqFrom = 'front') {
-  const { email, routeWithHash } = req.body
+  const parsedData = schemaValidator(res, forgotPWDSchema, req.body)
+  if (!parsedData) return
+
+  const role = reqFrom === 'front' ? 'user' : 'admin'
+
+  const { email, routeWithHash } = parsedData
   const Users = collection('users')
 
-  const user = await Users.findOne({ email })
+  const user = await Users.findOne({ email, role })
 
   if (!user) {
     return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
@@ -625,7 +713,6 @@ async function sendEmailToResetPWD(req, res, next, reqFrom = 'front') {
   const { randomToken, pwdResetToken, pwdResetExpires } =
     createTokenForPwdReset()
 
-  const role = reqFrom === 'front' ? 'user' : 'admin'
   const userUpdated = await Users.findOneAndUpdate(
     { email, role },
     { $set: { pwdResetToken, pwdResetExpires } },

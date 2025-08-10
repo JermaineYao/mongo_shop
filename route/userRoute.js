@@ -9,6 +9,7 @@ const {
 } = require('../controller/authController')
 
 const router = express.Router()
+const upload = multer().any()
 
 // 註冊前檢查帳號 信箱是否已被使用(前台)
 router.post('/check_user', user.checkIfAccountExists)
@@ -63,7 +64,6 @@ router.post('/update_user_info', routerGuard, user.updateUser)
 // 更新 user (地址, 電話)(後台)
 router.post('/update_user_info_admin', routerGuardAdmin, user.updateUserAdmin)
 
-const upload = multer().any()
 // 上傳,更新照片 (前台)
 router.post('/upload_user_photo', upload, routerGuard, user.updateUserPhoto)
 // 上傳,更新照片 (後台)
@@ -73,5 +73,10 @@ router.post(
   routerGuardAdmin,
   user.updateUserPhotoAdmin
 )
+
+// 刪除照片(前台)
+router.get('/delete_user_photo', routerGuard, user.deleteUserPhoto)
+// 刪除照片(後台)
+router.post('/delete_user_photo', routerGuardAdmin, user.deleteUserPhotoAdmin)
 
 module.exports = router
