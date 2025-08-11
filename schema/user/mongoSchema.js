@@ -2,6 +2,7 @@ exports.userJsonSchema = {
   $jsonSchema: {
     bsonType: 'object',
     required: ['account', 'email', 'role', 'active', 'pwd'],
+    additionalProperties: false,
     properties: {
       account: {
         bsonType: 'string',
@@ -21,6 +22,7 @@ exports.userJsonSchema = {
       active: { bsonType: 'bool' },
       photo: {
         bsonType: 'object',
+        additionalProperties: false,
         properties: {
           createAt: { bsonType: ['string', 'null'] },
           fileKey: { bsonType: ['string', 'null'] },
@@ -60,5 +62,7 @@ exports.userJsonSchema = {
         description: '重置密碼時效'
       }
     }
-  }
+  },
+  validationLevel: 'moderate', // 或 "strict"
+  validationAction: 'error' // 違反則拒絕寫入
 }

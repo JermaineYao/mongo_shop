@@ -4,7 +4,9 @@ const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 
 const { collection, collectionExists, DB } = require('../utils/db')
+const { catchError } = require('../utils/catchError')
 const Email = require('../utils/email')
+
 const {
   uploadFileToAWS,
   deleteFileFromAWS,
@@ -32,7 +34,6 @@ const {
   validateObjectId,
   renameId
 } = require('../utils/utils.js')
-const { catchError } = require('../utils/catchError')
 
 /*============= 註冊 =============*/
 // 註冊(前台)
@@ -243,16 +244,23 @@ async function updateUserPhotoObj(req, res, reqFrom = 'front') {
   const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
   const userId = validateObjectId(reqId, res)
 
-  const parsedData = schemaValidator(res, checkUploadPhotoSchema, req.body)
-  if (!parsedData) return
-  const { target } = parsedData
+  // const parsedData = schemaValidator(res, checkUploadPhotoSchema, req.body)
+  // if (!parsedData) return
+  // const { target } = parsedData
 
   const { checkFileResult, fileType, file } = checkFileToBeUploaded(req, res)
   if (!checkFileResult) return
 
+  // 確認用戶存在
+  const Users = collection('users')
+  const user = await Users.findOne({ _id: userId }, { projection: { pwd: 0 } })
+  if (!user) {
+    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
+  }
+
   // 透過後端取得 persignedUrl, 然後上傳檔案至 S3
   const { uploadResult, fileKey } = await uploadFileToAWS(res, {
-    target,
+    target: 'userPhoto',
     prefixId: userId,
     fileType,
     file
@@ -268,12 +276,6 @@ async function updateUserPhotoObj(req, res, reqFrom = 'front') {
     }
   }
 
-  const Users = collection('users')
-  const user = await Users.findOne({ _id: userId }, { projection: { pwd: 0 } })
-  if (!user) {
-    return res.status(404).json({ status: 'failed', msg: '用戶不存在' })
-  }
-
   const userUpdated = await Users.findOneAndUpdate(
     { _id: userId },
     { $set: updateContent },
@@ -284,11 +286,12 @@ async function updateUserPhotoObj(req, res, reqFrom = 'front') {
       returnDocument: 'after'
     }
   )
-  const data = renameId('userId', userUpdated)
 
   if (!userUpdated) {
     return res.status(404).json({ status: 'failed', msg: '照片更新失敗' })
   }
+
+  const data = renameId('userId', userUpdated)
 
   // 刪除 user 原有的圖片
   const toBeDeleted = user.photo.fileKey

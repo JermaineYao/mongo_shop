@@ -1,12 +1,12 @@
 const { z, ZodError } = require('zod')
 
-exports.checkUploadPhotoSchema = z.object({
-  target: z.enum(['mainPhoto', 'subPhoto', 'userPhoto'], {
-    errorMap: () => ({
-      message: 'target 必須是 mainPhoto, subPhoto 或 userPhoto'
-    })
-  })
-})
+// exports.checkUploadPhotoSchema = z.object({
+//   target: z.enum(['mainPhoto', 'subPhoto', 'userPhoto'], {
+//     errorMap: () => ({
+//       message: 'target 必須是 mainPhoto, subPhoto 或 userPhoto'
+//     })
+//   })
+// })
 
 exports.checkFileToBeUploaded = (req, res) => {
   if (!req.files || !req.files[0]) {
