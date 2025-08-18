@@ -2,7 +2,8 @@ exports.productJsonSchema = {
   $jsonSchema: {
     bsonType: 'object',
     required: [
-      'name',
+      'procudtNameMain',
+      'procudtNameSub',
       'category',
       'price',
       'inStock',
@@ -12,9 +13,14 @@ exports.productJsonSchema = {
     ],
     additionalProperties: false,
     properties: {
-      name: {
+      _id: { bsonType: 'objectId' },
+      procudtNameMain: {
         bsonType: 'string',
-        description: '必填，商品名稱'
+        description: '必填，商品主名稱'
+      },
+      procudtNameSub: {
+        bsonType: ['string', 'null'],
+        description: '必填，商品副名稱'
       },
       category: {
         bsonType: 'string',
@@ -22,12 +28,12 @@ exports.productJsonSchema = {
         description: '必填，商品分類  0 碗, 1 瓶子, 2 杯子'
       },
       price: {
-        bsonType: 'int',
+        bsonType: ['int', 'long', 'double', 'decimal'],
         minimum: 0,
         description: '必填，價格 >= 0'
       },
       size: {
-        bsonType: 'string',
+        bsonType: ['string', 'null'],
         description: '可選，尺寸字串'
       },
       description: {
@@ -48,11 +54,11 @@ exports.productJsonSchema = {
       },
       mainPhoto: {
         bsonType: 'object',
-        required: ['createAt', 'fileKey', 'url', 'description'],
+        required: ['createAt', 'fileKey', 'url'],
         additionalProperties: false,
         properties: {
           createAt: {
-            bsonType: ['string', 'date'],
+            bsonType: ['string', 'date', 'null'],
             description: '主圖建立時間'
           },
           fileKey: {
@@ -62,10 +68,6 @@ exports.productJsonSchema = {
           url: {
             bsonType: ['string', 'null'],
             description: 'S3 檔案 URL，可為 null'
-          },
-          description: {
-            bsonType: 'string',
-            description: '圖片描述字串（可空字串）'
           }
         }
       },
@@ -74,14 +76,13 @@ exports.productJsonSchema = {
         description: '次要圖片陣列',
         items: {
           bsonType: 'object',
-          required: ['createAt', 'fileKey', 'url', 'description'],
+          required: ['createAt', 'fileKey', 'url'],
           additionalProperties: false,
           properties: {
             _id: { bsonType: 'objectId' },
-            createAt: { bsonType: ['date', 'string'] },
+            createAt: { bsonType: ['string', 'date', 'null'] },
             fileKey: { bsonType: ['string', 'null'] },
-            url: { bsonType: ['string', 'null'] },
-            description: { bsonType: ['string', 'null'] }
+            url: { bsonType: ['string', 'null'] }
           }
         }
       },
@@ -90,7 +91,5 @@ exports.productJsonSchema = {
         description: '建立時間'
       }
     }
-  },
-  validationLevel: 'moderate', // 或 "strict"
-  validationAction: 'error' // 違反則拒絕寫入
+  }
 }

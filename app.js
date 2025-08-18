@@ -79,11 +79,17 @@ const compression = require('compression')
 app.use(compression())
 
 /*---------------------- router ----------------------*/
-const apiVersion = '1'
+const apiVersion = '/api/v1'
 // 用戶
-const userUrl = `/api/v${apiVersion}/user`
+const userUrl = `${apiVersion}/user`
 const userRouter = require('./route/userRoute')
 app.use(userUrl, userRouter)
+
+// 商品
+const procudtUrl = `${apiVersion}/product`
+const productRouter = require('./route/productRoute')
+console.log(procudtUrl)
+app.use(procudtUrl, productRouter)
 
 // aws
 // const awsUrl = `/api/v${apiVersion}/aws`

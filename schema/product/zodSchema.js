@@ -1,38 +1,50 @@
 const { z, ZodError } = require('zod')
 
 // 新增產品
-exports.createProducSchema = z
+exports.createProductSchema = z
   .object({
-    nameMain: z.string().trim().min(1, '產品主名稱必填'),
+    procudtNameMain: z.string().trim().min(1, '產品主名稱必填'),
 
-    nameSub: z.string().trim().min(1, '產品副名稱必填'),
+    procudtNameSub: z.string().trim().min(1, '產品副名稱必填'),
 
-    price: z
-      .string()
-      .trim()
-      .regex(/^\d+(\.\d+)?$/, '價格必須是數字')
-      .transform((val) => Number(val))
-      .refine((val) => val > 0, '價格必須大於 0')
+    price: z.coerce
+      .number({ invalid_type_error: '價格必須是數字' })
+      .positive('價格必須大於 0'),
+    category: z.enum(['0', '1', '2'], { required_error: '商品分類必填' }),
+
+    size: z.string().optional(),
+
+    description: z
+      .array(
+        z.string().transform((s) => s.trim()) // 先去空白
+      )
+      .transform((arr) => arr.filter((s) => s.length > 0)) // 再移除空字串
+      .optional(),
+
+    inStock: z.coerce
+      .number({ invalid_type_error: '庫存必須是數字' })
+      .int('庫存必須是整數')
+      .min(0, '庫存不可小於 0')
   })
-  .strict() // 不允許主圖物件內多餘欄位
+  .strict() // 禁止多餘欄位
 
 // 檢查 產品名稱 是否已被使用
 exports.checkProductSchema = z
   .object({
-    nameMain: z.string().trim().optional().nullable(),
+    procudtNameMain: z.string().trim().optional().nullable(),
 
-    nameSub: z.string().trim().optional().nullable()
+    procudtNameSub: z.string().trim().optional().nullable()
   })
   .refine(
     (data) => {
       return (
-        !!(data.nameMain && data.nameMain.trim()) ||
-        !!(data.nameSub && data.nameSub.trim())
+        !!(data.procudtNameMain && data.procudtNameMain.trim()) ||
+        !!(data.procudtNameSub && data.procudtNameSub.trim())
       )
     },
     {
       message: '產品主名稱或 產品副名稱 至少需提供一項',
-      path: ['nameMain']
+      path: ['procudtNameMain']
     }
   )
   .strict() // 禁止多餘欄位
@@ -54,7 +66,12 @@ exports.updateProductSchema = z
 
     size: z.string().optional(),
 
-    description: z.array(z.string()).optional(),
+    description: z
+      .array(
+        z.string().transform((s) => s.trim()) // 先去空白
+      )
+      .transform((arr) => arr.filter((s) => s.length > 0)) // 再移除空字串
+      .optional(),
 
     inStock: z.coerce
       .number({ invalid_type_error: '庫存必須是數字' })
@@ -65,10 +82,6 @@ exports.updateProductSchema = z
     enable: z.coerce
       .boolean({ invalid_type_error: 'enable 必須是布林值' })
       .optional()
-
-    // mainPhoto: mainPhotoPatchSchema.optional(),
-
-    // createAt: z.union([z.string(), z.date()]).optional()
   })
   .strict()
   .refine(

@@ -22,14 +22,10 @@ const {
   forgotPWDSchema,
   checkPWDFromUrlUserSchema
 } = require('../schema/user/zodSchema')
-const {
-  checkUploadPhotoSchema,
-  checkFileToBeUploaded
-} = require('../schema/photo/zodSchema')
+const { checkFileToBeUploaded } = require('../schema/photo/zodSchema')
 const { schemaValidator } = require('../utils/schemaValidator')
 
 const {
-  formatDateTimeTW,
   getTaiwanTimestamp,
   validateObjectId,
   renameId
@@ -111,7 +107,8 @@ async function checkOrCreateUser(mode, reqFrom, req, res) {
 
   // 寫入資料庫
   const pwdHashed = await bcrypt.hash(pwd, 12)
-  const now = formatDateTimeTW()
+  // const now = formatDateTimeTW()
+  const now = new Date()
 
   const result = await Users.insertOne({
     account,
@@ -201,7 +198,7 @@ async function enableSwitchUserHandler(req, res, reqFrom = 'front') {
   const enable = req.body.enable ? req.body.enable : false
 
   const Users = collection('users')
-  const now = formatDateTimeTW()
+  const now = new Date()
   const user = await Users.findOneAndUpdate(
     { _id: id },
     { $set: { active: enable, disabledAt: enable ? null : now } },
@@ -270,7 +267,7 @@ async function updateUserPhotoObj(req, res, reqFrom = 'front') {
   // 更新 user 文檔
   const updateContent = {
     photo: {
-      createAt: formatDateTimeTW(),
+      createAt: new Date(),
       fileKey,
       url: getAWSImageUrl(fileKey)
     }
@@ -439,7 +436,7 @@ async function updateUserHandler(req, res, reqFrom = 'front') {
   }
 
   const updateData = {
-    modifiedAt: formatDateTimeTW()
+    modifiedAt: new Date()
   }
 
   const { address, phoneNumber } = req.body
@@ -652,6 +649,7 @@ async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
 
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
   const now = new Date(getTaiwanTimestamp())
+  console.log('now', now)
   const pwdHashed = await bcrypt.hash(newPWD, 12)
 
   const Users = collection('users')
@@ -667,7 +665,7 @@ async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
     {
       $set: {
         pwd: pwdHashed,
-        pwdChangeAt: formatDateTimeTW(),
+        pwdChangeAt: new Date(),
         pwdResetToken: null,
         pwdResetExpires: null
       }
@@ -677,6 +675,8 @@ async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
       returnDocument: 'after'
     }
   )
+
+  console.log('userUpdated', userUpdated)
 
   if (!userUpdated) {
     return res.status(400).json({

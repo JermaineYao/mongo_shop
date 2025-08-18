@@ -23,20 +23,20 @@ exports.createUserSchema = z
         '至少 8位元、至少包含一個大寫、小寫英文字母、數字、特殊字元'
       ),
 
-    address: z
-      .string()
-      .transform((val) => val.trim())
-      .optional()
-      .nullable(),
+    address: z.union([z.string(), z.null(), z.undefined()]).transform((v) => {
+      if (v == null) return null
+      const s = v.trim()
+      return s === '' ? null : s
+    }),
 
     phoneNumber: z
-      .union([z.string(), z.undefined(), z.null()])
-      .transform((val) =>
-        typeof val === 'string' && val.trim() === ''
-          ? null
-          : (val?.trim() ?? null)
-      )
-      .refine((val) => val === null || /^09\d{2}-\d{3}-\d{3}$/.test(val), {
+      .union([z.string(), z.null(), z.undefined()])
+      .transform((v) => {
+        if (v == null) return null
+        const s = v.trim()
+        return s === '' ? null : s
+      })
+      .refine((v) => v === null || /^09\d{2}-\d{3}-\d{3}$/.test(v), {
         message: '手機格式錯誤'
       })
   })

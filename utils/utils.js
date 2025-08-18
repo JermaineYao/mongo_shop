@@ -17,10 +17,13 @@ exports.formatDateTimeTW = (date = new Date()) => {
 }
 
 exports.getTaiwanTime = () => {
-  const now = new Date()
-  const taiwanStr = now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' })
+  // const now = new Date()
+  // const taiwanStr = now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' })
 
-  return new Date(taiwanStr)
+  // return new Date(taiwanStr)
+
+  const now = new Date()
+  return new Date(now.getTime() + 8 * 60 * 60 * 1000)
 }
 
 exports.getTaiwanTimestamp = (date = new Date()) => {

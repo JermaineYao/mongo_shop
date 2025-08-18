@@ -26,7 +26,6 @@ exports.uploadFileToAWS = async (res, uploadContent) => {
 
   // 2. PUT 上傳檔案到 S3
   try {
-    console.log('presigned', presigned)
     await axios.put(presigned.url, file.buffer, {
       headers: { 'Content-Type': file.mimetype }
     })
