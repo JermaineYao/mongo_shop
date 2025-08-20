@@ -22,13 +22,13 @@ const {
   forgotPWDSchema,
   checkPWDFromUrlUserSchema
 } = require('../schema/user/zodSchema')
-const { checkFileToBeUploaded } = require('../schema/photo/zodSchema')
 const { schemaValidator } = require('../utils/schemaValidator')
 
 const {
   getTaiwanTimestamp,
   validateObjectId,
-  renameId
+  renameId,
+  checkFileToBeUploaded
 } = require('../utils/utils.js')
 
 /*============= 註冊 =============*/

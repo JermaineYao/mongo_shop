@@ -10,9 +10,13 @@ const {
   updateProductSchema
 } = require('../schema/product/zodSchema')
 const { schemaValidator } = require('../utils/schemaValidator')
-const { checkFileToBeUploaded } = require('../schema/photo/zodSchema')
 
-const { validateObjectId, renameId } = require('../utils/utils.js')
+const {
+  validateObjectId,
+  renameId,
+  checkFileToBeUploaded
+} = require('../utils/utils')
+const SearchDoc = require('../utils/search')
 
 const {
   uploadFileToAWS,
@@ -43,7 +47,7 @@ async function checkOrCreateProduct(mode, req, res) {
 
     await db
       .collection('products')
-      .createIndex({ procudtNameMain: 1, procudtNameSub: 1 }, { unique: true })
+      .createIndex({ productNameMain: 1, productNameSub: 1 }, { unique: true })
   }
 
   const schema = mode === 'create' ? createProductSchema : checkProductSchema
@@ -51,13 +55,13 @@ async function checkOrCreateProduct(mode, req, res) {
 
   if (!parsedData) return
 
-  const { procudtNameMain, procudtNameSub } = parsedData
+  const { productNameMain, productNameSub } = parsedData
 
   const Products = collection('products')
 
   const [productByNameMain, productByNameSub] = await Promise.all([
-    Products.findOne({ procudtNameMain }),
-    Products.findOne({ procudtNameSub })
+    Products.findOne({ productNameMain }),
+    Products.findOne({ productNameSub })
   ])
 
   if (productByNameMain || productByNameSub) {
@@ -77,8 +81,8 @@ async function checkOrCreateProduct(mode, req, res) {
   const { category, price, size, description, inStock } = parsedData
 
   const result = await Products.insertOne({
-    procudtNameMain,
-    procudtNameSub,
+    productNameMain,
+    productNameSub,
     category,
     price,
     size,
@@ -182,7 +186,9 @@ exports.deleteProductAdmin = catchError(async (req, res, next) => {
 
   // 移除主要圖片
   if (product.mainPhoto.fileKey !== null) {
-    const { deleteResult, errMsg } = await deleteFileFromAWS(toBeDeleted)
+    const { deleteResult, errMsg } = await deleteFileFromAWS(
+      product.mainPhoto.fileKey
+    )
 
     if (!deleteResult) {
       return res.status(200).json({
@@ -233,37 +239,56 @@ exports.deleteProductAdmin = catchError(async (req, res, next) => {
 
 /*============= 查詢 =============*/
 // 查詢單一商品(前台)
-exports.findPneProduct = catchError(async (req, res, next) => {
-  const id = validateObjectId(req.params.productId, res)
-
-  const Products = collection('products')
-  const product = await Products.findOne(
-    { _id: id, enable: true },
-    { projection: { enable: 0 } }
-  )
-
-  if (!product) {
-    return res.status(404).json({ status: 'failed', msg: '商品不存在' })
-  }
-
-  const data = renameId('productId', product)
-  return res.status(200).json({ status: 'success', msg: '查詢成功', data })
+exports.findOneProduct = catchError(async (req, res, next) => {
+  await findOne(req, res)
 })
 
 // 查詢單一商品(後台)
 exports.findOneProductAdmin = catchError(async (req, res, next) => {
+  await findOne(req, res, 'admin')
+})
+
+async function findOne(req, res, reqFrom = 'front') {
   const id = validateObjectId(req.params.productId, res)
 
+  const queryCondition =
+    reqFrom === 'front' ? { _id: id, enable: true } : { _id: id }
+
   const Products = collection('products')
-  const product = await Products.findOne({ _id: id })
+  const product = await Products.findOne(queryCondition)
+
   if (!product) {
     return res.status(404).json({ status: 'failed', msg: '商品不存在' })
   }
 
   const data = renameId('productId', product)
   return res.status(200).json({ status: 'success', msg: '查詢成功', data })
+}
+
+// 查詢所有商品(前台)
+exports.findAllProducts = catchError(async (req, res, next) => {
+  await findAll(req, res)
 })
 
+// 查詢所有商品(後台)
+exports.findAllProductsAdmin = catchError(async (req, res, next) => {
+  await findAll(req, res, 'admin')
+})
+
+async function findAll(req, res, reqFrom = 'front') {
+  const queryCondition = { ...req.body }
+  if (reqFrom === 'front') queryCondition.enable = true
+
+  const products = new SearchDoc('products', queryCondition)
+  const dataCount = await products.countDocuments()
+  const data = await products.filter().sort().limitFields().pagination().exec()
+
+  return res.status(200).json({
+    status: 'success',
+    data,
+    dataCount
+  })
+}
 /*============= 圖片 =============*/
 // 上傳主要圖片
 exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
@@ -346,12 +371,20 @@ exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
 })
 
 // 上傳次要圖片
+/*
+  file
+  productId
+  subPhotoId
+*/
 exports.uploadProductSubPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
-  const subPhotoId = req.body.subPhotoId
-    ? validateObjectId(req.body.subPhotoId, res)
-    : new ObjectId()
-  const hasSubPhoto = req.body.subPhotoId ? true : false
+  const rawSubPhotoId = req.body.subPhotoId
+  const subPhotoId =
+    rawSubPhotoId && rawSubPhotoId !== 'null'
+      ? validateObjectId(rawSubPhotoId, res)
+      : new ObjectId()
+
+  const hasSubPhoto = rawSubPhotoId && rawSubPhotoId !== 'null' ? true : false
 
   const { checkFileResult, fileType, file } = checkFileToBeUploaded(req, res)
   if (!checkFileResult) return
@@ -470,6 +503,9 @@ exports.uploadProductSubPhotoAdmin = catchError(async (req, res, next) => {
 })
 
 // 刪除主要圖片
+/*
+  productId
+*/
 exports.deleteProductMainPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
 
@@ -534,9 +570,15 @@ exports.deleteProductMainPhotoAdmin = catchError(async (req, res, next) => {
 })
 
 // 刪除次要圖片
+/*
+  productId
+  subPhotoId
+  fileKey
+*/
 exports.deleteProductSubPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
   const subPhotoId = validateObjectId(req.body.subPhotoId, res)
+
   const fileKey = req.body.fileKey
   if (!fileKey) {
     return res.status(400).json({
@@ -589,7 +631,6 @@ exports.deleteProductSubPhotoAdmin = catchError(async (req, res, next) => {
     }
   )
 
-  console.log('subPhoto deletedPhotoResult', deletedPhotoResult)
   if (!deletedPhotoResult) {
     return res.status(422).json({
       status: 'failed',

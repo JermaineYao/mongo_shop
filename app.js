@@ -88,7 +88,6 @@ app.use(userUrl, userRouter)
 // 商品
 const procudtUrl = `${apiVersion}/product`
 const productRouter = require('./route/productRoute')
-console.log(procudtUrl)
 app.use(procudtUrl, productRouter)
 
 // aws

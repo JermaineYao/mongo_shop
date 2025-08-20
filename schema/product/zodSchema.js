@@ -3,16 +3,16 @@ const { z, ZodError } = require('zod')
 // 新增產品
 exports.createProductSchema = z
   .object({
-    procudtNameMain: z.string().trim().min(1, '產品主名稱必填'),
+    productNameMain: z.string().trim().min(1, '產品主名稱必填'),
 
-    procudtNameSub: z.string().trim().min(1, '產品副名稱必填'),
+    productNameSub: z.string().trim().min(1, '產品副名稱必填'),
 
     price: z.coerce
       .number({ invalid_type_error: '價格必須是數字' })
       .positive('價格必須大於 0'),
     category: z.enum(['0', '1', '2'], { required_error: '商品分類必填' }),
 
-    size: z.string().optional(),
+    size: z.string().optional().nullable(),
 
     description: z
       .array(
@@ -31,20 +31,20 @@ exports.createProductSchema = z
 // 檢查 產品名稱 是否已被使用
 exports.checkProductSchema = z
   .object({
-    procudtNameMain: z.string().trim().optional().nullable(),
+    productNameMain: z.string().trim().optional().nullable(),
 
-    procudtNameSub: z.string().trim().optional().nullable()
+    productNameSub: z.string().trim().optional().nullable()
   })
   .refine(
     (data) => {
       return (
-        !!(data.procudtNameMain && data.procudtNameMain.trim()) ||
-        !!(data.procudtNameSub && data.procudtNameSub.trim())
+        !!(data.productNameMain && data.productNameMain.trim()) ||
+        !!(data.productNameSub && data.productNameSub.trim())
       )
     },
     {
       message: '產品主名稱或 產品副名稱 至少需提供一項',
-      path: ['procudtNameMain']
+      path: ['productNameMain']
     }
   )
   .strict() // 禁止多餘欄位

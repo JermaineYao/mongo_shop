@@ -2,8 +2,8 @@ exports.productJsonSchema = {
   $jsonSchema: {
     bsonType: 'object',
     required: [
-      'procudtNameMain',
-      'procudtNameSub',
+      'productNameMain',
+      'productNameSub',
       'category',
       'price',
       'inStock',
@@ -14,11 +14,11 @@ exports.productJsonSchema = {
     additionalProperties: false,
     properties: {
       _id: { bsonType: 'objectId' },
-      procudtNameMain: {
+      productNameMain: {
         bsonType: 'string',
         description: '必填，商品主名稱'
       },
-      procudtNameSub: {
+      productNameSub: {
         bsonType: ['string', 'null'],
         description: '必填，商品副名稱'
       },
@@ -79,7 +79,7 @@ exports.productJsonSchema = {
           required: ['createAt', 'fileKey', 'url'],
           additionalProperties: false,
           properties: {
-            _id: { bsonType: 'objectId' },
+            subPhotoId: { bsonType: 'objectId' },
             createAt: { bsonType: ['string', 'date', 'null'] },
             fileKey: { bsonType: ['string', 'null'] },
             url: { bsonType: ['string', 'null'] }
