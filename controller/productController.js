@@ -52,7 +52,6 @@ async function checkOrCreateProduct(mode, req, res) {
 
   const schema = mode === 'create' ? createProductSchema : checkProductSchema
   const parsedData = schemaValidator(res, schema, req.body)
-
   if (!parsedData) return
 
   const { productNameMain, productNameSub } = parsedData
@@ -219,9 +218,20 @@ exports.deleteProductAdmin = catchError(async (req, res, next) => {
   }
 
   // 從我的最愛刪除
+  const favoritesExist = await collectionExists('favorites')
+  if (favoritesExist) {
+    const Favorites = collection('favorites')
+    await Favorites.deleteMany({ productId: id })
+  }
 
   // 從購物車刪除
+  const cartsExist = await collectionExists('carts')
+  if (cartsExist) {
+    const Carts = collection('carts')
+    await Carts.deleteMany({ productId: id })
+  }
 
+  // 刪除此商品
   const result = await Products.deleteOne({ _id: id })
 
   if (result.deletedCount === 0) {
@@ -267,17 +277,59 @@ async function findOne(req, res, reqFrom = 'front') {
 
 // 查詢所有商品(前台)
 exports.findAllProducts = catchError(async (req, res, next) => {
-  await findAll(req, res)
+  const userId = req.user ? validateObjectId(req.user._id, res) : null
+  const queryCondition = { ...req.body }
+  queryCondition.enable = true
+
+  const productsRaw = new SearchDoc('products', queryCondition)
+  const dataCount = await productsRaw.countDocuments()
+  const products = await productsRaw
+    .filter()
+    .sort()
+    .limitFields()
+    .pagination()
+    .exec()
+
+  if (userId) {
+    const Favorites = collection('favorites')
+    // const Carts = collection('carts')
+
+    const [favoriteRaw, cartRaw] = await Promise.all([
+      Favorites.find({ userId }, { projection: { productId: 1 } }).toArray()
+
+      // Carts.find({ userId }, { projection: { productId: 1 } }).toArray()
+    ])
+
+    const favSet = new Set(favoriteRaw.map((f) => f.productId.toString()))
+    // const cartSet = new Set(cartRaw.map((f) => f.productId.toString()))
+
+    const data = products.map((p) => {
+      const pid = p._id.toString()
+
+      return {
+        ...p,
+        addedToFavorite: favSet.has(pid)
+        // addedToCart: cartSet.has(pid)
+      }
+    })
+
+    return res.status(200).json({
+      status: 'success',
+      data,
+      dataCount
+    })
+  }
+
+  return res.status(200).json({
+    status: 'success',
+    data: products,
+    dataCount
+  })
 })
 
 // 查詢所有商品(後台)
 exports.findAllProductsAdmin = catchError(async (req, res, next) => {
-  await findAll(req, res, 'admin')
-})
-
-async function findAll(req, res, reqFrom = 'front') {
   const queryCondition = { ...req.body }
-  if (reqFrom === 'front') queryCondition.enable = true
 
   const products = new SearchDoc('products', queryCondition)
   const dataCount = await products.countDocuments()
@@ -288,11 +340,11 @@ async function findAll(req, res, reqFrom = 'front') {
     data,
     dataCount
   })
-}
+})
+
 /*============= 圖片 =============*/
 // 上傳主要圖片
 exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
-  // const description = (req.body.description ?? '').trim()
   const productId = validateObjectId(req.body.productId, res)
 
   const { checkFileResult, fileType, file } = checkFileToBeUploaded(req, res)
@@ -320,7 +372,6 @@ exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
       createAt: new Date(),
       fileKey,
       url: getAWSImageUrl(fileKey)
-      // description
     }
   }
 

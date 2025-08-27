@@ -33,7 +33,7 @@ async function guard(req, res, next, reqFrom = 'front') {
     return next(new AppError('JWT 無效或已過期', 401))
   }
 
-  const id = validateObjectId(decoded.id)
+  const id = validateObjectId(decoded.id, res)
   const Users = collection('users')
 
   const user = await Users.findOne({ _id: id }, { projection: { pwd: 0 } })

@@ -4,8 +4,7 @@ const user = require('../controller/userController')
 
 const {
   routerGuard,
-  routerGuardAdmin,
-  restrictTo
+  routerGuardAdmin
 } = require('../controller/authController')
 
 const router = express.Router()
@@ -47,7 +46,7 @@ router.post('/reset_pwd', user.resetPWD)
 router.post('/reset_pwd', user.resetPWDAdmin)
 
 // 取得所有帳號(後台)
-// router.get('/all', user.getAllUsers)
+router.get('/all', routerGuardAdmin, user.findAllUsers)
 
 // 查詢我的帳號(前台)
 router.post('/my_account', routerGuard, user.myAccount)

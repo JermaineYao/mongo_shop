@@ -180,6 +180,21 @@ async function queryAccount(req, res, reqFrom = 'front') {
   return res.status(200).json({ status: 'success', msg: '查詢成功', data })
 }
 
+// 取得所有帳號(後台)
+exports.findAllUsers = catchError(async (req, res, next) => {
+  const queryCondition = { ...req.body }
+
+  const users = new SearchDoc('users', queryCondition)
+  const dataCount = await users.countDocuments()
+  const data = await users.filter().sort().limitFields().pagination().exec()
+
+  return res.status(200).json({
+    status: 'success',
+    data,
+    dataCount
+  })
+})
+
 /*============= 停用,啟用 帳號 =============*/
 // 停用,啟用 帳號 (前台)
 exports.enableSwitchUser = catchError(async (req, res, next) => {
@@ -675,8 +690,6 @@ async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
       returnDocument: 'after'
     }
   )
-
-  console.log('userUpdated', userUpdated)
 
   if (!userUpdated) {
     return res.status(400).json({

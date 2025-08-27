@@ -1,3 +1,4 @@
+const { ObjectId } = require('mongodb')
 const { collection } = require('./db')
 
 class SearchDoc {
@@ -17,16 +18,38 @@ class SearchDoc {
       if (rawQuery[key] === '') delete rawQuery[key]
     }
 
-    let queryStr = JSON.stringify(rawQuery)
-    queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, (match) => `$${match}`)
+    // 先保留 ObjectId 類型的欄位，避免 stringify → string
+    const preserveObjectIds = {}
+    const objectIdKeys = ['_id', 'userId', 'productId', 'orderId']
+    for (const k of objectIdKeys) {
+      if (rawQuery[k] && rawQuery[k] instanceof ObjectId) {
+        preserveObjectIds[k] = rawQuery[k]
+      }
+    }
 
+    let queryStr = JSON.stringify(rawQuery)
+    queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, (m) => `$${m}`)
     this.query = JSON.parse(queryStr)
+
+    // 還原 ObjectId
+    Object.assign(this.query, preserveObjectIds)
 
     // 需要模糊比對
     const keywordFieldsOfUsers = ['account', 'email', 'phoneNumber', 'address']
     const keywordFieldsOfProducts = ['productNameMain', 'productNameSub']
+    const keywordFieldsOfOrders = [
+      'orderNo',
+      'receiver',
+      'receiverAddress',
+      'receiverPhoneNumber'
+    ]
 
-    const keywordFields = [...keywordFieldsOfUsers, ...keywordFieldsOfProducts]
+    const keywordFields = [
+      ...keywordFieldsOfUsers,
+      ...keywordFieldsOfProducts,
+      ...keywordFieldsOfOrders
+    ]
+
     for (const field of keywordFields) {
       const val = this.query[field]
 
@@ -49,10 +72,12 @@ class SearchDoc {
   filter() {
     this.buildQuery()
 
+    console.log('query', this.query)
     this.cursor = this.collection.find(this.query)
     return this
   }
 
+  // 排序
   sort() {
     if (!this.cursor) return this
 
@@ -70,6 +95,7 @@ class SearchDoc {
     return this
   }
 
+  // 回傳那些字段
   limitFields() {
     if (!this.cursor) return this
 

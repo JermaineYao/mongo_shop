@@ -90,6 +90,16 @@ const procudtUrl = `${apiVersion}/product`
 const productRouter = require('./route/productRoute')
 app.use(procudtUrl, productRouter)
 
+// 我的最愛
+const favoriteUrl = `${apiVersion}/favorite`
+const favoriateRouter = require('./route/favoriateRoute')
+app.use(favoriteUrl, favoriateRouter)
+
+// 訂單
+const orderUrl = `${apiVersion}/order`
+const orderRouter = require('./route/orderRoute')
+app.use(orderUrl, orderRouter)
+
 // aws
 // const awsUrl = `/api/v${apiVersion}/aws`
 // const awsRouter = require('./route/s3Route')

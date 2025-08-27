@@ -37,6 +37,7 @@ exports.getTaiwanTimestamp = (date = new Date()) => {
 
 exports.validateObjectId = (objId, res) => {
   const id = `${objId}`
+
   if (!ObjectId.isValid(id)) {
     res.status(400).json({ status: 'failed', msg: '無效的 ID' })
 
@@ -44,6 +45,14 @@ exports.validateObjectId = (objId, res) => {
   }
 
   return new ObjectId(id)
+}
+
+exports.isValidObjectId = (id) => {
+  try {
+    return ObjectId.isValid(id) && String(new ObjectId(id)) === String(id)
+  } catch {
+    return false
+  }
 }
 
 exports.renameId = (idField, data) => {

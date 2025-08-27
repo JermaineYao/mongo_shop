@@ -19,7 +19,7 @@ exports.productJsonSchema = {
         description: '必填，商品主名稱'
       },
       productNameSub: {
-        bsonType: ['string', 'null'],
+        bsonType: 'string',
         description: '必填，商品副名稱'
       },
       category: {
