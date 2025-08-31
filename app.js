@@ -100,24 +100,6 @@ const orderUrl = `${apiVersion}/order`
 const orderRouter = require('./route/orderRoute')
 app.use(orderUrl, orderRouter)
 
-// aws
-// const awsUrl = `/api/v${apiVersion}/aws`
-// const awsRouter = require('./route/s3Route')
-// app.use(awsUrl, awsRouter)
-
-// setImmediate(() => {
-//   console.log('📦 掛載中的所有路由 path 與 regexp：')
-//   app._router?.stack?.forEach((layer) => {
-//     if (layer.route) {
-//       console.log('🛣️ Route:', layer.route.path)
-//     } else if (layer.name === 'router') {
-//       console.log('🧭 Mounted router on path (regexp):', layer.regexp)
-//     } else {
-//       console.log('🔁 Middleware Layer')
-//     }
-//   })
-// })
-
 // /* --------------- 處理不存在的網址請求 ---------------*/
 const AppError = require('./utils/appError')
 

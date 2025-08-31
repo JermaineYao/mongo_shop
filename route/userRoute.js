@@ -17,8 +17,9 @@ router.post('/check_user_admin', user.checkIfAccountAdminExists)
 
 // 註冊(前台)
 router.post('/sign_up', user.signup)
-// 註冊(後台)
-router.post('/sign_up_admin', user.signupAdmin)
+
+// 新增帳號(前台)
+router.post('/add_user_admin', user.addUserAdmin)
 
 // 登入(前台)
 router.post('/sign_in', user.signIn)
@@ -43,7 +44,7 @@ router.post('/forgot_pwd_admin', user.forgotPWDAdmin)
 // 忘記密碼 - 設定新密碼(前台)
 router.post('/reset_pwd', user.resetPWD)
 // 忘記密碼 - 設定新密碼(後台)
-router.post('/reset_pwd', user.resetPWDAdmin)
+router.post('/reset_pwd_admin', user.resetPWDAdmin)
 
 // 取得所有帳號(後台)
 router.get('/all', routerGuardAdmin, user.findAllUsers)

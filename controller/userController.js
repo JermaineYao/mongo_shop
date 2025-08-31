@@ -37,8 +37,8 @@ exports.signup = catchError(async (req, res, next) => {
   await checkOrCreateUser('create', 'front', req, res)
 })
 
-// 註冊(前台)
-exports.signupAdmin = catchError(async (req, res, next) => {
+// 新增帳號(前台)
+exports.addUserAdmin = catchError(async (req, res, next) => {
   await checkOrCreateUser('create', 'admin', req, res)
 })
 
@@ -527,6 +527,10 @@ exports.signInAdmin = catchError(async (req, res, next) => {
   await login(req, res, 'admin')
 })
 
+/**
+ * @param {string} req.body.account
+ * @param {string} req.body.pwd
+ */
 async function login(req, res, reqFrom = 'front') {
   const parsedData = schemaValidator(res, loginSchema, req.body)
   if (!parsedData) return
@@ -711,13 +715,17 @@ exports.forgotPWDAdmin = catchError(async (req, res, next) => {
   await sendEmailToResetPWD(req, res, 'admin')
 })
 
+/**
+ * @param {string} req.body.email
+ */
 async function sendEmailToResetPWD(req, res, next, reqFrom = 'front') {
   const parsedData = schemaValidator(res, forgotPWDSchema, req.body)
   if (!parsedData) return
 
   const role = reqFrom === 'front' ? 'user' : 'admin'
 
-  const { email, routeWithHash } = parsedData
+  // const { email, routeWithHash } = parsedData
+  const { email } = parsedData
   const Users = collection('users')
 
   const user = await Users.findOne({ email, role })
@@ -749,9 +757,11 @@ async function sendEmailToResetPWD(req, res, next, reqFrom = 'front') {
   }
 
   const subject = '請在 10分鐘內點擊連結, 並完成密碼設定'
-  const resetURL = routeWithHash
-    ? `${req.get('origin')}/#/set_pwd/${randomToken}`
-    : `${req.get('origin')}/set_pwd/${randomToken}`
+  // const resetURL = routeWithHash
+  //   ? `${req.get('origin')}/#/set_pwd/${randomToken}`
+  //   : `${req.get('origin')}/set_pwd/${randomToken}`
+
+  const resetURL = `${req.get('origin')}/set_pwd/${randomToken}`
 
   try {
     await new Email(userUpdated, resetURL).send('forgotPassword', subject)

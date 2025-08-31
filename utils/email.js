@@ -6,7 +6,7 @@ module.exports = class Email {
   constructor(user, url) {
     this.to = user.email
     this.from = `陶釉工房 <${process.env.EMAIL_FROM}>`
-    this.fullName = user.fullName
+    this.account = user.account
     this.url = url
   }
 
@@ -26,7 +26,7 @@ module.exports = class Email {
     let html
     if (template) {
       html = pug.renderFile(`${__dirname}/../views/email/${template}.pug`, {
-        fullName: this.fullName,
+        account: this.account,
         url: this.url,
         subject
       })

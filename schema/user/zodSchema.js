@@ -117,8 +117,8 @@ exports.updateUserSchema = z
 // 忘記密碼(發送密碼設定連結至用戶信箱)
 exports.forgotPWDSchema = z
   .object({
-    email: z.string().trim().toLowerCase().email('信箱格式錯誤'),
-    routeWithHash: z.boolean()
+    email: z.string().trim().toLowerCase().email('信箱格式錯誤')
+    // routeWithHash: z.boolean()
   })
   .strict() // 禁止多餘欄位
 
