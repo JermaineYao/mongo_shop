@@ -20,7 +20,8 @@ const {
   loginSchema,
   updateUserSchema,
   forgotPWDSchema,
-  checkPWDFromUrlUserSchema
+  checkPWDFromUrlUserSchema,
+  changePwdlUserSchema
 } = require('../schema/user/zodSchema')
 const { schemaValidator } = require('../utils/schemaValidator')
 
@@ -30,6 +31,7 @@ const {
   renameId,
   checkFileToBeUploaded
 } = require('../utils/utils.js')
+const SearchDoc = require('../utils/search')
 
 /*============= 註冊 =============*/
 // 註冊(前台)
@@ -37,7 +39,7 @@ exports.signup = catchError(async (req, res, next) => {
   await checkOrCreateUser('create', 'front', req, res)
 })
 
-// 新增帳號(前台)
+// 新增帳號(後台)
 exports.addUserAdmin = catchError(async (req, res, next) => {
   await checkOrCreateUser('create', 'admin', req, res)
 })
@@ -107,7 +109,6 @@ async function checkOrCreateUser(mode, reqFrom, req, res) {
 
   // 寫入資料庫
   const pwdHashed = await bcrypt.hash(pwd, 12)
-  // const now = formatDateTimeTW()
   const now = new Date()
 
   const result = await Users.insertOne({
@@ -146,18 +147,25 @@ async function checkOrCreateUser(mode, reqFrom, req, res) {
 }
 
 /*============= 查詢帳號 =============*/
-// 查詢我的帳號(前台)
+// 查詢我的帳號(前台, 後台)
 exports.myAccount = catchError(async (req, res, next) => {
   await queryAccount(req, res)
 })
 
-// 查詢 user (後台)
+// 查詢其他 user (後台)
 exports.findUserAdmin = catchError(async (req, res, next) => {
   await queryAccount(req, res, 'admin')
 })
 
-async function queryAccount(req, res, reqFrom = 'front') {
-  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+/**
+ * 查詢其他 user (後台)
+ * @param {string} req.body.userId
+ *
+ * 查詢我的帳號(前台, 後台)
+ * @param {string} req.body._id
+ */
+async function queryAccount(req, res, reqFrom = 'user') {
+  const reqId = reqFrom === 'user' ? req.user._id : req.body.userId
   const id = validateObjectId(reqId, res)
 
   const Users = collection('users')
@@ -185,13 +193,18 @@ exports.findAllUsers = catchError(async (req, res, next) => {
   const queryCondition = { ...req.body }
 
   const users = new SearchDoc('users', queryCondition)
+
   const dataCount = await users.countDocuments()
   const data = await users.filter().sort().limitFields().pagination().exec()
+  const totalPages = users.limit > 0 ? Math.ceil(dataCount / users.limit) : 1
 
   return res.status(200).json({
     status: 'success',
     data,
-    dataCount
+    dataCount,
+    totalPages,
+    page: users.currentPage,
+    limit: users.limit
   })
 })
 
@@ -206,9 +219,18 @@ exports.enableSwitchUserAdmin = catchError(async (req, res, next) => {
   await enableSwitchUserHandler(req, res, 'admin')
 })
 
+/**
+ * @param {boolean} req.body.enable
+ *
+ * 後台
+ * @param {string} req.body.userId
+ *
+ * 前台
+ * @param {string} req.body._id
+ */
 async function enableSwitchUserHandler(req, res, reqFrom = 'front') {
   const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
-  const id = validateObjectId(reqId, res)
+  const id = reqFrom === 'front' ? reqId : validateObjectId(reqId, res)
 
   const enable = req.body.enable ? req.body.enable : false
 
@@ -248,17 +270,18 @@ exports.updateUserPhotoAdmin = catchError(async (req, res, next) => {
   await updateUserPhotoObj(req, res, 'admin')
 })
 
-/*
-  res.body: target,
-  req: file
-*/
+/**
+ * @param {Binary} req.file
+ *
+ * 後台
+ * @param {string} req.body.userId
+ *
+ * 前台
+ * @param {string} req.body._id
+ */
 async function updateUserPhotoObj(req, res, reqFrom = 'front') {
   const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
-  const userId = validateObjectId(reqId, res)
-
-  // const parsedData = schemaValidator(res, checkUploadPhotoSchema, req.body)
-  // if (!parsedData) return
-  // const { target } = parsedData
+  const userId = reqFrom === 'front' ? reqId : validateObjectId(reqId, res)
 
   const { checkFileResult, fileType, file } = checkFileToBeUploaded(req, res)
   if (!checkFileResult) return
@@ -344,9 +367,16 @@ exports.deleteUserPhotoAdmin = catchError(async (req, res, next) => {
   await deleteUserPhotoObj(req, res, 'admin')
 })
 
+/**
+ * 後台
+ * @param {string} req.params.userId
+ *
+ * 前台
+ * @param {string} req.body._id
+ */
 async function deleteUserPhotoObj(req, res, reqFrom = 'front') {
-  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
-  const userId = validateObjectId(reqId, res)
+  const reqId = reqFrom === 'front' ? req.user._id : req.params.userId
+  const userId = reqFrom === 'front' ? reqId : validateObjectId(reqId, res)
 
   const Users = collection('users')
   const user = await Users.findOne(
@@ -422,7 +452,20 @@ exports.updateUserAdmin = catchError(async (req, res, next) => {
   await updateUserHandler(req, res, 'admin')
 })
 
+/**
+ * @param {string} req.body.address
+ * @param {string} req.body.phoneNumber
+ *
+ * 後台
+ * @param {string} req.body.userId
+ *
+ * 前台
+ * @param {string} req.body._id
+ */
 async function updateUserHandler(req, res, reqFrom = 'front') {
+  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
+  const id = reqFrom === 'front' ? reqId : validateObjectId(reqId, res)
+
   const parsed = updateUserSchema.safeParse(req.body)
 
   if (!parsed.success) {
@@ -437,8 +480,6 @@ async function updateUserHandler(req, res, reqFrom = 'front') {
       errors
     })
   }
-  const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
-  const id = validateObjectId(reqId, res)
 
   const Users = collection('users')
   const user = await Users.findOne(
@@ -627,7 +668,10 @@ async function loginCheck(req, res, reqFrom = 'front') {
     const id = validateObjectId(decoded.id)
     const Users = collection('users')
 
-    const user = await Users.findOne({ _id: id }, { projection: { pwd: 0 } })
+    const user = await Users.findOne(
+      { _id: id },
+      { projection: { account: 1, photo: 1, active: 1 } }
+    )
 
     if (!user) {
       logout(req, res, reqFrom)
@@ -637,8 +681,8 @@ async function loginCheck(req, res, reqFrom = 'front') {
 
     return res.status(200).json({
       status: 'success',
-      msg: '驗證通過'
-      // data: user
+      msg: '驗證通過',
+      data: user
     })
   }
 
@@ -649,6 +693,59 @@ async function loginCheck(req, res, reqFrom = 'front') {
 }
 
 /*============= 密碼 =============*/
+// 修改密碼 (前台)
+exports.updatePwd = catchError(async (req, res, next) => {
+  await changePwd(req, res)
+})
+
+// 修改密碼 (後台)
+exports.updatePwdAdmin = catchError(async (req, res, next) => {
+  await changePwd(req, res, 'admin')
+})
+
+/**
+ * @param {string} req.body.newPWD
+ * @param {string} req.body.pwdCurrent
+ */
+async function changePwd(req, res, reqFrom = 'front') {
+  const Users = collection('users')
+  const userId = req.user._id
+
+  const user = await Users.findOne({ _id: userId }, { projection: { pwd: 1 } })
+
+  const parsedData = schemaValidator(res, changePwdlUserSchema, req.body)
+
+  if (!parsedData) return
+  const { newPWD } = parsedData
+
+  // 就密碼是否正確
+  const checkPwd = await comparePWD(parsedData.pwdCurrent, user.pwd)
+
+  if (!checkPwd) {
+    return res.status(401).json({ status: 'failed', msg: '舊密碼錯誤' })
+  }
+
+  const pwdHashed = await bcrypt.hash(newPWD, 12)
+
+  const userUpdated = await Users.findOneAndUpdate(
+    { _id: userId },
+    {
+      $set: {
+        pwd: pwdHashed,
+        pwdChangeAt: new Date(),
+        pwdResetToken: null,
+        pwdResetExpires: null
+      }
+    },
+    {
+      projection: { pwd: 0 },
+      returnDocument: 'after'
+    }
+  )
+
+  setTokenInCookie(req, res, userUpdated, 200, '密碼已修改', reqFrom)
+}
+
 // 忘記密碼 - 設定新密碼 (前台)
 exports.resetPWD = catchError(async (req, res, next) => {
   await setNewPWDFromUrl(req, res)
@@ -659,6 +756,10 @@ exports.resetPWDAdmin = catchError(async (req, res, next) => {
   await setNewPWDFromUrl(req, res, 'admin')
 })
 
+/**
+ * @param {string} req.body.newPWD
+ * @param {string} req.body.token
+ */
 async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
   const parsedData = schemaValidator(res, checkPWDFromUrlUserSchema, req.body)
   if (!parsedData) return
@@ -668,7 +769,7 @@ async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
 
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
   const now = new Date(getTaiwanTimestamp())
-  console.log('now', now)
+
   const pwdHashed = await bcrypt.hash(newPWD, 12)
 
   const Users = collection('users')
@@ -707,7 +808,7 @@ async function setNewPWDFromUrl(req, res, reqFrom = 'front') {
 
 // 忘記密碼(發送密碼設定連結至用戶信箱) - 前台
 exports.forgotPWD = catchError(async (req, res, next) => {
-  await sendEmailToResetPWD(req, res, 'front')
+  await sendEmailToResetPWD(req, res)
 })
 
 // 忘記密碼(發送密碼設定連結至用戶信箱) - 後台
@@ -718,14 +819,14 @@ exports.forgotPWDAdmin = catchError(async (req, res, next) => {
 /**
  * @param {string} req.body.email
  */
-async function sendEmailToResetPWD(req, res, next, reqFrom = 'front') {
+async function sendEmailToResetPWD(req, res, reqFrom = 'front') {
   const parsedData = schemaValidator(res, forgotPWDSchema, req.body)
   if (!parsedData) return
 
   const role = reqFrom === 'front' ? 'user' : 'admin'
 
-  // const { email, routeWithHash } = parsedData
-  const { email } = parsedData
+  const { email, routeWithHash } = parsedData
+  // const { email } = parsedData
   const Users = collection('users')
 
   const user = await Users.findOne({ email, role })
@@ -757,11 +858,11 @@ async function sendEmailToResetPWD(req, res, next, reqFrom = 'front') {
   }
 
   const subject = '請在 10分鐘內點擊連結, 並完成密碼設定'
-  // const resetURL = routeWithHash
-  //   ? `${req.get('origin')}/#/set_pwd/${randomToken}`
-  //   : `${req.get('origin')}/set_pwd/${randomToken}`
+  const resetURL = routeWithHash
+    ? `${req.get('origin')}/#/set_pwd/${randomToken}`
+    : `${req.get('origin')}/set_pwd/${randomToken}`
 
-  const resetURL = `${req.get('origin')}/set_pwd/${randomToken}`
+  // const resetURL = `${req.get('origin')}/set_pwd/${randomToken}`
 
   try {
     await new Email(userUpdated, resetURL).send('forgotPassword', subject)

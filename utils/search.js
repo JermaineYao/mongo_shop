@@ -5,6 +5,9 @@ class SearchDoc {
   constructor(collectionName, queryString) {
     this.collection = collection(collectionName)
     this.queryString = queryString
+    this.page = 1
+    this.limit = 10
+    this.skip = 1
     this.query = {}
     this.cursor = null
   }
@@ -15,7 +18,7 @@ class SearchDoc {
     excludeKeys.forEach((key) => delete rawQuery[key])
 
     for (const key in rawQuery) {
-      if (rawQuery[key] === '') delete rawQuery[key]
+      if (rawQuery[key] === '' || !rawQuery[key]) delete rawQuery[key]
     }
 
     // 先保留 ObjectId 類型的欄位，避免 stringify → string
@@ -72,7 +75,6 @@ class SearchDoc {
   filter() {
     this.buildQuery()
 
-    console.log('query', this.query)
     this.cursor = this.collection.find(this.query)
     return this
   }
@@ -133,11 +135,11 @@ class SearchDoc {
   pagination() {
     if (!this.cursor) return this
 
-    const page = parseInt(this.queryString.currentPage) || 1 // 目前頁數
-    const limit = parseInt(this.queryString.limit) || 10 // 每頁多少筆
-    const skip = (page - 1) * limit // 從第幾筆開始取
+    this.page = parseInt(this.queryString.currentPage) || 1 // 目前頁數
+    this.limit = parseInt(this.queryString.limit) || 10 // 每頁多少筆
+    this.skip = (this.page - 1) * this.limit // 從第幾筆開始取
 
-    this.cursor = this.cursor.skip(skip).limit(limit)
+    this.cursor = this.cursor.skip(this.skip).limit(this.limit)
     return this
   }
 

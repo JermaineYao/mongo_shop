@@ -95,30 +95,28 @@ exports.loginSchema = z
   .strict() // 禁止多餘欄位
 
 // 更新 user (地址, 電話)
-exports.updateUserSchema = z
-  .object({
-    address: z
-      .string()
-      .transform((val) => val.trim())
-      .optional()
-      .nullable(),
+exports.updateUserSchema = z.object({
+  address: z
+    .string()
+    .transform((val) => val.trim())
+    .optional()
+    .nullable(),
 
-    phoneNumber: z
-      .string()
-      .transform((val) => (val.trim() === '' ? null : val.trim()))
-      .nullable()
-      .optional()
-      .refine((val) => val === null || /^09\d{2}-\d{3}-\d{3}$/.test(val), {
-        message: '手機格式錯誤'
-      })
-  })
-  .strict() // 禁止多餘欄位
+  phoneNumber: z
+    .string()
+    .transform((val) => (val.trim() === '' ? null : val.trim()))
+    .nullable()
+    .optional()
+    .refine((val) => val === null || /^09\d{2}-\d{3}-\d{3}$/.test(val), {
+      message: '手機格式錯誤'
+    })
+})
 
 // 忘記密碼(發送密碼設定連結至用戶信箱)
 exports.forgotPWDSchema = z
   .object({
-    email: z.string().trim().toLowerCase().email('信箱格式錯誤')
-    // routeWithHash: z.boolean()
+    email: z.string().trim().toLowerCase().email('信箱格式錯誤'),
+    routeWithHash: z.boolean()
   })
   .strict() // 禁止多餘欄位
 
@@ -137,6 +135,20 @@ exports.checkPWDFromUrlUserSchema = z
       )
   })
   .strict() // 禁止多餘欄位
+
+// 修改密碼
+exports.changePwdlUserSchema = z.object({
+  pwdCurrent: z.string().trim(),
+
+  newPWD: z
+    .string()
+    .trim()
+    .min(8)
+    .regex(
+      /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|\\,.\/<>?;:'"~`])/,
+      '至少 8位元、至少包含一個大寫、小寫英文字母、數字、特殊字元'
+    )
+})
 
 // 上傳照片
 exports.userPhotoSchema = z.object({

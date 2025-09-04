@@ -50,10 +50,10 @@ async function guard(req, res, next, reqFrom = 'front') {
   next()
 }
 
-//  路由使用權限限制
-exports.restrictTo = (roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
-    return next(new AppError('帳號無此權限', 403))
+//  路由使用權限限制, 需帳戶啟用
+exports.isUserActive = () => (req, res, next) => {
+  if (!req.user.active) {
+    return next(new AppError('帳號未啟用', 403))
   }
 
   next()

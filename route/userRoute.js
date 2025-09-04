@@ -4,7 +4,8 @@ const user = require('../controller/userController')
 
 const {
   routerGuard,
-  routerGuardAdmin
+  routerGuardAdmin,
+  isUserActive
 } = require('../controller/authController')
 
 const router = express.Router()
@@ -36,6 +37,11 @@ router.get('/is_login', user.isLogin)
 // 檢查是否登入(後台)
 router.get('/is_login_admin', user.isLoginAdmin)
 
+// 修改密碼 (前台)
+router.patch('/update_pwd', routerGuard, user.updatePwd)
+// 修改密碼 (後台)
+router.patch('/update_pwd_admin', routerGuardAdmin, user.updatePwdAdmin)
+
 // 忘記密碼(發送密碼設定連結至用戶信箱)(前台)
 router.post('/forgot_pwd', user.forgotPWD)
 // 忘記密碼(發送密碼設定連結至用戶信箱)(後台)
@@ -47,22 +53,24 @@ router.post('/reset_pwd', user.resetPWD)
 router.post('/reset_pwd_admin', user.resetPWDAdmin)
 
 // 取得所有帳號(後台)
-router.get('/all', routerGuardAdmin, user.findAllUsers)
+router.post('/all', routerGuardAdmin, isUserActive(), user.findAllUsers)
 
 // 查詢我的帳號(前台)
-router.post('/my_account', routerGuard, user.myAccount)
+router.get('/my_account', routerGuard, user.myAccount)
+// 查詢我的帳號(後台)
+router.get('/my_account_admin', routerGuardAdmin, user.myAccount)
 // 查詢單一帳號(後台)
 router.post('/query_user', routerGuardAdmin, user.findUserAdmin)
 
-// 停用帳號(前台)
-router.post('/user_enable', routerGuard, user.enableSwitchUser)
-// 停用帳號(後台)
-router.post('/user_enable', routerGuardAdmin, user.enableSwitchUserAdmin)
+// 停用,啟用 帳號(前台)
+router.patch('/user_enable', routerGuard, user.enableSwitchUser)
+// 停用,啟用 帳號(後台)
+router.patch('/user_enable_admin', routerGuardAdmin, user.enableSwitchUserAdmin)
 
 // 更新 user (地址, 電話)(前台)
-router.post('/update_user_info', routerGuard, user.updateUser)
+router.patch('/update_user_info', routerGuard, user.updateUser)
 // 更新 user (地址, 電話)(後台)
-router.post('/update_user_info_admin', routerGuardAdmin, user.updateUserAdmin)
+router.patch('/update_user_info_admin', routerGuardAdmin, user.updateUserAdmin)
 
 // 上傳,更新照片 (前台)
 router.post('/upload_user_photo', upload, routerGuard, user.updateUserPhoto)
@@ -75,8 +83,12 @@ router.post(
 )
 
 // 刪除照片(前台)
-router.get('/delete_user_photo', routerGuard, user.deleteUserPhoto)
+router.delete('/delete_user_photo', routerGuard, user.deleteUserPhoto)
 // 刪除照片(後台)
-router.post('/delete_user_photo', routerGuardAdmin, user.deleteUserPhotoAdmin)
+router.delete(
+  '/delete_user_photo_admin/:userId',
+  routerGuardAdmin,
+  user.deleteUserPhotoAdmin
+)
 
 module.exports = router
