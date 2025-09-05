@@ -74,12 +74,28 @@ async function setUserValidator() {
 }
 
 // 統一處理註冊與帳號檢查
+/**
+ * 新增
+ * @param {string} req.body.account
+ * @param {string} req.body.email
+ * @param {string} req.body.pwd
+ * @param {string || null || undefined} req.body.phoneNumber
+ * @param {string || null || undefined} req.body.address
+ *
+ * 檢查 (account, email 至少給一個)
+ * @param {string} req.body.account
+ * @param {string} req.body.email
+ */
 async function checkOrCreateUser(mode, reqFrom, req, res) {
   const role = reqFrom === 'admin' ? 'admin' : 'user'
   const UsersExist = await collectionExists('users')
   if (!UsersExist) {
     if (mode === 'check') return { status: 'success', msg: '可使用' }
     await setUserValidator()
+  }
+
+  if (reqFrom === 'admin' && mode === 'create') {
+    req.body.pwd = '@Admin1234'
   }
 
   const schema = mode === 'create' ? createUserSchema : checkUserSchema
@@ -97,18 +113,19 @@ async function checkOrCreateUser(mode, reqFrom, req, res) {
 
   if (userByAccount || userByEmail) {
     if (mode === 'check') {
-      return { status: 'failed', msg: '帳號或密碼已被使用', code: 409 }
+      return { status: 'failed', msg: '帳號或信箱已被使用', code: 409 }
     } else {
       return res
         .status(409)
-        .json({ status: 'failed', msg: '帳號或密碼已被使用' })
+        .json({ status: 'failed', msg: '帳號或信箱已被使用' })
     }
   }
 
   if (mode === 'check') return { status: 'success', msg: '可使用' }
 
   // 寫入資料庫
-  const pwdHashed = await bcrypt.hash(pwd, 12)
+  const accountPad = reqFrom === 'front' ? pwd : '@Admin1234'
+  const pwdHashed = await bcrypt.hash(accountPad, 12)
   const now = new Date()
 
   const result = await Users.insertOne({
@@ -194,7 +211,7 @@ exports.findAllUsers = catchError(async (req, res, next) => {
 
   const users = new SearchDoc('users', queryCondition)
 
-  const dataCount = await users.countDocuments()
+  const dataCount = (await users.countDocuments()) - 1 // 扣除自己的帳號
   const data = await users.filter().sort().limitFields().pagination().exec()
   const totalPages = users.limit > 0 ? Math.ceil(dataCount / users.limit) : 1
 

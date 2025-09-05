@@ -19,8 +19,13 @@ router.post('/check_user_admin', user.checkIfAccountAdminExists)
 // 註冊(前台)
 router.post('/sign_up', user.signup)
 
-// 新增帳號(前台)
-router.post('/add_user_admin', user.addUserAdmin)
+// 新增帳號(後台)
+router.post(
+  '/add_user_admin',
+  routerGuardAdmin,
+  isUserActive(),
+  user.addUserAdmin
+)
 
 // 登入(前台)
 router.post('/sign_in', user.signIn)

@@ -17,9 +17,22 @@ class SearchDoc {
     const excludeKeys = ['currentPage', 'sort', 'limit', 'fields']
     excludeKeys.forEach((key) => delete rawQuery[key])
 
+    // 僅移除空字串 / null / undefined，保留 false 與 0
     for (const key in rawQuery) {
-      if (rawQuery[key] === '' || !rawQuery[key]) delete rawQuery[key]
+      const v = rawQuery[key]
+      const isEmptyString = typeof v === 'string' && v.trim() === ''
+      if (v == null || isEmptyString) {
+        // 等同於 v === null || v === undefined
+        delete rawQuery[key]
+      }
     }
+
+    // 把 'true'/'false' 字串轉成布林
+    // if (typeof rawQuery.active === 'string') {
+    //   if (rawQuery.active.toLowerCase() === 'true') rawQuery.active = true
+    //   else if (rawQuery.active.toLowerCase() === 'false')
+    //     rawQuery.active = false
+    // }
 
     // 先保留 ObjectId 類型的欄位，避免 stringify → string
     const preserveObjectIds = {}
