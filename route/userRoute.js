@@ -14,7 +14,12 @@ const upload = multer().any()
 // 註冊前檢查帳號 信箱是否已被使用(前台)
 router.post('/check_user', user.checkIfAccountExists)
 // 註冊前檢查帳號 信箱是否已被使用(後台)
-router.post('/check_user_admin', user.checkIfAccountAdminExists)
+router.post(
+  '/check_user_admin',
+  routerGuardAdmin,
+  isUserActive(),
+  user.checkIfAccountAdminExists
+)
 
 // 註冊(前台)
 router.post('/sign_up', user.signup)
@@ -65,7 +70,7 @@ router.get('/my_account', routerGuard, user.myAccount)
 // 查詢我的帳號(後台)
 router.get('/my_account_admin', routerGuardAdmin, user.myAccount)
 // 查詢單一帳號(後台)
-router.post('/query_user', routerGuardAdmin, user.findUserAdmin)
+router.post('/query_user', routerGuardAdmin, isUserActive(), user.findUserAdmin)
 
 // 停用,啟用 帳號(前台)
 router.patch('/user_enable', routerGuard, user.enableSwitchUser)
@@ -93,6 +98,7 @@ router.delete('/delete_user_photo', routerGuard, user.deleteUserPhoto)
 router.delete(
   '/delete_user_photo_admin/:userId',
   routerGuardAdmin,
+  isUserActive(),
   user.deleteUserPhotoAdmin
 )
 

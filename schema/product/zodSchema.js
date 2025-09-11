@@ -10,6 +10,7 @@ exports.createProductSchema = z
     price: z.coerce
       .number({ invalid_type_error: '價格必須是數字' })
       .positive('價格必須大於 0'),
+
     category: z.enum(['0', '1', '2'], { required_error: '商品分類必填' }),
 
     size: z.string().optional().nullable(),
@@ -77,11 +78,11 @@ exports.updateProductSchema = z
       .number({ invalid_type_error: '庫存必須是數字' })
       .int('庫存必須是整數')
       .min(0, '庫存不可小於 0')
-      .optional(),
-
-    enable: z.coerce
-      .boolean({ invalid_type_error: 'enable 必須是布林值' })
       .optional()
+
+    // enable: z.coerce
+    //   .boolean({ invalid_type_error: 'enable 必須是布林值' })
+    //   .optional()
   })
   .strict()
   .refine(

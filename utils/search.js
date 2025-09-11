@@ -20,19 +20,66 @@ class SearchDoc {
     // 僅移除空字串 / null / undefined，保留 false 與 0
     for (const key in rawQuery) {
       const v = rawQuery[key]
-      const isEmptyString = typeof v === 'string' && v.trim() === ''
-      if (v == null || isEmptyString) {
-        // 等同於 v === null || v === undefined
+
+      // 先處理頂層空字串/null/undefined（保留 0/false）
+      const isEmptyTopStr = typeof v === 'string' && v.trim() === ''
+      if (v == null || isEmptyTopStr) {
         delete rawQuery[key]
+        continue
       }
+
+      // 非物件（number/boolean/string 非空）直接跳過
+      if (typeof v !== 'object') continue
+
+      // 跳過特殊物件（避免被當作空物件刪掉）
+      if (
+        v instanceof ObjectId ||
+        v instanceof Date ||
+        v instanceof RegExp
+        // 需要就再加上 BSON/Buffer/Decimal128 等型別
+      ) {
+        continue
+      }
+
+      // 陣列：做元素過濾
+      if (Array.isArray(v)) {
+        const filtered = v.filter((el) => {
+          const isEmptyStr = typeof el === 'string' && el.trim() === ''
+          return !(el == null || isEmptyStr)
+        })
+        if (filtered.length === 0) delete rawQuery[key]
+        else rawQuery[key] = filtered
+        continue
+      }
+
+      // 只清理「純物件」的子鍵
+      if (Object.prototype.toString.call(v) === '[object Object]') {
+        for (const subKey in v) {
+          const subV = v[subKey]
+          const isEmptySubStr = typeof subV === 'string' && subV.trim() === ''
+          if (subV == null || isEmptySubStr) {
+            delete v[subKey]
+          }
+        }
+        if (Object.keys(v).length === 0) delete rawQuery[key]
+        continue
+      }
+
+      // 其他非純物件（例如 Map/Set/自訂類別）一律保留
     }
 
     // 把 'true'/'false' 字串轉成布林
-    // if (typeof rawQuery.active === 'string') {
-    //   if (rawQuery.active.toLowerCase() === 'true') rawQuery.active = true
-    //   else if (rawQuery.active.toLowerCase() === 'false')
-    //     rawQuery.active = false
-    // }
+    if (typeof rawQuery.active === 'string') {
+      if (rawQuery.active.toLowerCase() === 'true') rawQuery.active = true
+      else if (rawQuery.active.toLowerCase() === 'false')
+        rawQuery.active = false
+    }
+
+    if (typeof rawQuery.enable === 'string') {
+      if (rawQuery.enable.toLowerCase() === 'true') rawQuery.enable = true
+      else if (rawQuery.enable.toLowerCase() === 'false')
+        rawQuery.enable = false
+    }
 
     // 先保留 ObjectId 類型的欄位，避免 stringify → string
     const preserveObjectIds = {}

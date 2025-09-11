@@ -606,7 +606,7 @@ async function login(req, res, reqFrom = 'front') {
   const Users = collection('users')
   const user = await Users.findOne(
     { account, role },
-    { projection: { _id: 1, role: 1, pwd: 1 } }
+    { projection: { _id: 1, role: 1, pwd: 1, active: 1 } }
   )
 
   if (!user) {
@@ -653,7 +653,8 @@ function setTokenInCookie(req, res, user, statusCode, msg, reqFrom = 'front') {
 
   return res.status(statusCode).json({
     status: 'success',
-    msg
+    msg,
+    active: user.active
   })
 }
 

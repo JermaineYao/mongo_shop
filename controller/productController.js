@@ -35,6 +35,19 @@ exports.checkProductNameAdmin = catchError(async (req, res, next) => {
   await checkOrCreateProduct('check', req, res)
 })
 
+/**
+ * 新增
+ * @param {string} req.body.productNameMain
+ * @param {string} req.body.productNameSub
+ * @param {number} req.body.price
+ * @param {string} req.body.category
+ * @param {number} req.body.inStock
+ * @param {array<string || null> || null || undefined} req.body.description
+ *
+ * 檢查 (account, email 至少給一個)
+ * @param {string} req.body.productNameMain
+ * @param {string} req.body.productNameSub
+ */
 async function checkOrCreateProduct(mode, req, res) {
   const productsExist = await collectionExists('products')
 
@@ -63,13 +76,27 @@ async function checkOrCreateProduct(mode, req, res) {
     Products.findOne({ productNameSub })
   ])
 
-  if (productByNameMain || productByNameSub) {
+  if (productByNameMain) {
     if (mode === 'check') {
-      return { status: 'failed', msg: '主名稱或副名稱已被使用', code: 409 }
+      return res
+        .status(409)
+        .json({ status: 'failed', msg: '商品主名稱已被使用', code: 409 })
     } else {
       return res
         .status(409)
-        .json({ status: 'failed', msg: '主名稱或副名稱已被使用' })
+        .json({ status: 'failed', msg: '商品主名稱已被使用' })
+    }
+  }
+
+  if (productByNameSub) {
+    if (mode === 'check') {
+      return res
+        .status(409)
+        .json({ status: 'failed', msg: '商品副名稱已被使用', code: 409 })
+    } else {
+      return res
+        .status(409)
+        .json({ status: 'failed', msg: '商品副名稱已被使用' })
     }
   }
 
@@ -109,12 +136,21 @@ async function checkOrCreateProduct(mode, req, res) {
 
   return res.status(201).json({
     status: 'success',
-    msg: '新增成功',
+    msg: '新增商品成功',
     data
   })
 }
 
 /*============= 修改商品 =============*/
+// 修改商品內容 (圖片資訊, 啟用除外)
+/**
+ * @param {string} req.body.procudtId
+ * @param {string} req.body.category
+ * @param {number} req.body.price
+ * @param {string} req.body.size
+ * @param {array<string || null> || null || undefined} req.body.description
+ * @param {number} req.body.inStock
+ */
 exports.updateProductAdmin = catchError(async (req, res, next) => {
   const parsedData = schemaValidator(res, updateProductSchema, req.body)
   if (!parsedData) return
@@ -145,10 +181,16 @@ exports.updateProductAdmin = catchError(async (req, res, next) => {
 
 /*============= 啟用/停用, 刪除 商品 =============*/
 // 啟用, 停用商品
+/**
+ * @param {string} req.body.procudtId
+ * @param {boolean || null} req.body.enbale
+ */
 exports.enableSwitchProductAdmin = catchError(async (req, res, next) => {
   const id = validateObjectId(req.body.productId, res)
   const enable = req.body.enable ? req.body.enable : false
-  const msgFailedStr = req.body.enable ? '啟用失敗' : '停用失敗'
+  const msgFailedStr = req.body.enable
+    ? '啟用失敗 請檢查是否有商品主要圖片'
+    : '停用失敗'
   const msgSuccessStr = req.body.enable ? '已啟用' : '已停用'
 
   // 必須有商品圖片才可以啟用
@@ -175,6 +217,19 @@ exports.enableSwitchProductAdmin = catchError(async (req, res, next) => {
 exports.deleteProductAdmin = catchError(async (req, res, next) => {
   const id = validateObjectId(req.body.productId, res)
   // 檢查帳單是否有此商品
+  const Orders = collection('orders')
+  const count = await Orders.countDocuments({
+    status: { $in: ['pending', 'shipping', 'completed'] },
+    'productsOrdered.productId': id
+  })
+
+  if (count > 0) {
+    return res.status(409).json({
+      status: 'failed',
+      msg: '訂單中有此商品，不能刪除（請改為下架）',
+      count
+    })
+  }
 
   // 查詢商品是否存在
   const Products = collection('products')
@@ -183,20 +238,20 @@ exports.deleteProductAdmin = catchError(async (req, res, next) => {
     return res.status(404).json({ status: 'failed', msg: '商品不存在' })
   }
 
-  // 移除主要圖片
-  if (product.mainPhoto.fileKey !== null) {
-    const { deleteResult, errMsg } = await deleteFileFromAWS(
-      product.mainPhoto.fileKey
-    )
+  // 移除主要圖片 (不刪除, 訂單快照需要)
+  // if (product.mainPhoto.fileKey !== null) {
+  //   const { deleteResult, errMsg } = await deleteFileFromAWS(
+  //     product.mainPhoto.fileKey
+  //   )
 
-    if (!deleteResult) {
-      return res.status(200).json({
-        status: 'success',
-        msg: '刪除舊主要圖片失敗',
-        deleteError: errMsg
-      })
-    }
-  }
+  //   if (!deleteResult) {
+  //     return res.status(200).json({
+  //       status: 'success',
+  //       msg: '刪除舊主要圖片失敗',
+  //       deleteError: errMsg
+  //     })
+  //   }
+  // }
 
   // 移除次要圖片
   if (Array.isArray(product.subPhotos) && product.subPhotos.length > 0) {
@@ -258,6 +313,9 @@ exports.findOneProductAdmin = catchError(async (req, res, next) => {
   await findOne(req, res, 'admin')
 })
 
+/**
+ * @param {string} req.params.procudtId
+ */
 async function findOne(req, res, reqFrom = 'front') {
   const id = validateObjectId(req.params.productId, res)
 
@@ -334,18 +392,28 @@ exports.findAllProductsAdmin = catchError(async (req, res, next) => {
   const products = new SearchDoc('products', queryCondition)
   const dataCount = await products.countDocuments()
   const data = await products.filter().sort().limitFields().pagination().exec()
+  const totalPages =
+    products.limit > 0 ? Math.ceil(dataCount / products.limit) : 1
 
   return res.status(200).json({
     status: 'success',
     data,
-    dataCount
+    dataCount,
+    totalPages,
+    page: products.currentPage,
+    limit: products.limit
   })
 })
 
 /*============= 圖片 =============*/
 // 上傳主要圖片
+/**
+ * @param {string} req.body.procudtId
+ * @param {binary} req.file
+ */
 exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
+  console.log('productId', productId)
 
   const { checkFileResult, fileType, file } = checkFileToBeUploaded(req, res)
   if (!checkFileResult) return
@@ -375,6 +443,8 @@ exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
     }
   }
 
+  console.log('updateContent', updateContent)
+
   const productUpdated = await Products.findOneAndUpdate(
     { _id: productId },
     { $set: updateContent },
@@ -392,26 +462,34 @@ exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
 
   const data = renameId('productId', productUpdated)
 
-  // 刪除 product 原有的圖片
-  const toBeDeleted = product.mainPhoto.fileKey
+  // 若訂單中無此商品, 刪除 product 原有的圖片
+  const Orders = collection('orders')
+  const orderCount = await Orders.countDocuments({
+    status: { $in: ['pending', 'shipping', 'completed'] },
+    'productsOrdered.productId': productId
+  })
 
-  if (!toBeDeleted) {
-    return res.status(200).json({
-      status: 'success',
-      msg: '上傳圖片完成',
-      data
-    })
-  }
+  if (orderCount === 0) {
+    const toBeDeleted = product.mainPhoto.fileKey
 
-  const { deleteResult, errMsg } = await deleteFileFromAWS(toBeDeleted)
+    if (!toBeDeleted) {
+      return res.status(200).json({
+        status: 'success',
+        msg: '上傳圖片完成',
+        data
+      })
+    }
 
-  if (!deleteResult) {
-    return res.status(200).json({
-      status: 'success',
-      msg: '上傳成功，但刪除舊圖片失敗',
-      data,
-      deleteError: errMsg
-    })
+    const { deleteResult, errMsg } = await deleteFileFromAWS(toBeDeleted)
+
+    if (!deleteResult) {
+      return res.status(200).json({
+        status: 'success',
+        msg: '上傳成功，但刪除舊圖片失敗',
+        data,
+        deleteError: errMsg
+      })
+    }
   }
 
   return res.status(200).json({
@@ -422,11 +500,11 @@ exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
 })
 
 // 上傳次要圖片
-/*
-  file
-  productId
-  subPhotoId
-*/
+/**
+ * @param {string} req.body.procudtId
+ * @param {string || null} req.body.subPhotoId
+ * @param {binary} req.file
+ */
 exports.uploadProductSubPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
   const rawSubPhotoId = req.body.subPhotoId
@@ -554,9 +632,9 @@ exports.uploadProductSubPhotoAdmin = catchError(async (req, res, next) => {
 })
 
 // 刪除主要圖片
-/*
-  productId
-*/
+/**
+ * @param {string} req.body.procudtId
+ */
 exports.deleteProductMainPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
 
@@ -621,11 +699,11 @@ exports.deleteProductMainPhotoAdmin = catchError(async (req, res, next) => {
 })
 
 // 刪除次要圖片
-/*
-  productId
-  subPhotoId
-  fileKey
-*/
+/**
+ * @param {string} req.body.procudtId
+ * @param {string} req.body.subPhotoId
+ * @param {string} req.body.fileKey
+ */
 exports.deleteProductSubPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
   const subPhotoId = validateObjectId(req.body.subPhotoId, res)
