@@ -1,7 +1,11 @@
 const express = require('express')
 const order = require('../controller/orderControllers')
 
-const { routerGuard } = require('../controller/authController')
+const {
+  routerGuard,
+  routerGuardAdmin,
+  isUserActive
+} = require('../controller/authController')
 
 const router = express.Router()
 
@@ -12,13 +16,23 @@ router.post('/create', order.createOrder)
 router.get('/my_order/:orderNo', order.findMyOrder)
 
 // 查詢該訂單 (後台)
-router.get('/order_admin/:orderNo', order.findOneOrderAdmin)
+router.get(
+  '/order_admin/:orderNo',
+  routerGuardAdmin,
+  isUserActive(),
+  order.findOneOrderAdmin
+)
 
 // 查詢該用戶所有訂單 (前台)
 router.post('/my_orders', order.findMyOrders)
 
 // 查詢所有訂單 (後台)
-router.post('/orders_admin', order.findAllOrdersAdmin)
+router.post(
+  '/orders_admin',
+  routerGuardAdmin,
+  isUserActive(),
+  order.findAllOrdersAdmin
+)
 
 // 修改訂單狀態 (前台)
 router.patch('/order/:id/status/:status', order.updateOrderStatus)

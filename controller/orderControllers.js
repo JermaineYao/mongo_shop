@@ -18,12 +18,11 @@ const SearchDoc = require('../utils/search')
 
 // 建立訂單（從購物車生成 → 同時檢查庫存、扣減庫存）(前台)
 exports.createOrder = catchError(async (req, res, next) => {
-  const userId = validateObjectId(req.body.userId, res)
-  const Users = collection('users')
-  const user = await Users.findOne({ _id: userId, active: true })
-  // const userId = validateObjectId(req.user._id, res)
-  // const account = req.user.account
-  // const email = req.user.email
+  // const userId = validateObjectId(req.body.userId, res)
+  // const Users = collection('users')
+  // const user = await Users.findOne({ _id: userId, active: true })
+  const userId = validateObjectId(req.user._id, res)
+  const user = req.user
 
   const OrdersExist = await collectionExists('orders')
 
@@ -86,7 +85,10 @@ exports.createOrder = catchError(async (req, res, next) => {
     if (p.inStock < item.quantity) {
       return res.status(400).json({
         status: 'failed',
-        msg: '庫存不足'
+        inStock: p.inStock,
+        orderQuantity: item.quantity,
+        productId: p._id,
+        msg: `${p.productNameMain} ${p.productNameSub} 庫存不足, 庫存 ${p.inStock}`
       })
       // throw new AppError('庫存不足', 400)
     }
@@ -225,6 +227,9 @@ exports.findOneOrderAdmin = catchError(async (req, res, next) => {
   await findOne(req, res, 'admin')
 })
 
+/**
+ * @param {string} req.params.orderNo
+ */
 async function findOne(req, res, reqFrom = 'front') {
   const parsedData = schemaValidator(res, orderNoSchema, req.params)
   if (!parsedData) return
@@ -237,6 +242,12 @@ async function findOne(req, res, reqFrom = 'front') {
   if (!data) {
     return res.status(404).json({ status: 'failed', msg: '訂單不存在' })
   }
+
+  const sumQuantity = data.productsOrdered.reduce(
+    (acc, p) => acc + p.quantity,
+    0
+  )
+  data.sumQuantity = sumQuantity
 
   return res.status(200).json({ status: 'success', msg: '查詢成功', data })
 }
@@ -273,11 +284,15 @@ exports.findAllOrdersAdmin = catchError(async (req, res, next) => {
   const orders = new SearchDoc('orders', queryCondition)
   const dataCount = await orders.countDocuments()
   const data = await orders.filter().sort().limitFields().pagination().exec()
+  const totalPages = orders.limit > 0 ? Math.ceil(dataCount / orders.limit) : 1
 
   return res.status(200).json({
     status: 'success',
     data,
-    dataCount
+    dataCount,
+    totalPages,
+    page: orders.currentPage,
+    limit: orders.limit
   })
 })
 
@@ -303,18 +318,19 @@ exports.updateOrderStatus = catchError(async (req, res, next) => {
 })
 
 // 修改訂單狀態 (後台)
-/*
-  PATCH /order_admin/:id/status/:status
-  body: { newStatus: 'shipping' | 'completed' | 'cancelled' }
-*/
+/**
+ * PATCH /order_admin/:id/status/:status
+ * @param {string} req.params.id
+ *
+ * 下個訂單狀態
+ * @param {string<newStatus: 'shipping' | 'completed' | 'cancelled'>} req.params.status
+ */
 exports.updateOrderStatusAdmin = catchError(async (req, res, next) => {
   await setOrderStatus(req, res, 'admin')
 })
 
 async function setOrderStatus(req, res, reqFrom = 'front') {
   const id = validateObjectId(req.params.id)
-
-  console.log('req', req.params)
 
   const statusSchema =
     reqFrom === 'front' ? orderStatusSchema : orderStatusAdminSchema
