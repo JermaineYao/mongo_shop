@@ -335,11 +335,19 @@ async function findOne(req, res, reqFrom = 'front') {
 
 // 查詢所有商品(前台)
 exports.findAllProducts = catchError(async (req, res, next) => {
-  const userId = req.user ? validateObjectId(req.user._id, res) : null
-  const queryCondition = { ...req.body }
+  const userId = req.user ? new ObjectId(req.user._id) : null
+
+  const queryCondition = normalizeQuery(req.query)
   queryCondition.enable = true
 
-  const productsRaw = new SearchDoc('products', queryCondition)
+  const productsRaw = new SearchDoc('products', queryCondition, {
+    productNameMain: 1,
+    productNameSub: 1,
+    category: 1,
+    price: 1,
+    inStock: 1,
+    mainPhoto: 1
+  })
   const dataCount = await productsRaw.countDocuments()
   const products = await productsRaw
     .filter()
@@ -347,43 +355,96 @@ exports.findAllProducts = catchError(async (req, res, next) => {
     .limitFields()
     .pagination()
     .exec()
+  const totalPages =
+    productsRaw.limit > 0 ? Math.ceil(dataCount / productsRaw.limit) : 1
 
   if (userId) {
     const Favorites = collection('favorites')
-    // const Carts = collection('carts')
+    const Carts = collection('carts')
 
     const [favoriteRaw, cartRaw] = await Promise.all([
-      Favorites.find({ userId }, { projection: { productId: 1 } }).toArray()
-
-      // Carts.find({ userId }, { projection: { productId: 1 } }).toArray()
+      Favorites.find({ userId }, { projection: { productId: 1 } }).toArray(),
+      Carts.find({ userId }, { projection: { productId: 1 } }).toArray()
     ])
 
     const favSet = new Set(favoriteRaw.map((f) => f.productId.toString()))
-    // const cartSet = new Set(cartRaw.map((f) => f.productId.toString()))
+    const cartSet = new Set(cartRaw.map((f) => f.productId.toString()))
 
     const data = products.map((p) => {
       const pid = p._id.toString()
 
       return {
         ...p,
-        addedToFavorite: favSet.has(pid)
-        // addedToCart: cartSet.has(pid)
+        addedToFavorite: favSet.has(pid),
+        addedToCart: cartSet.has(pid)
       }
     })
 
     return res.status(200).json({
       status: 'success',
       data,
-      dataCount
+      dataCount,
+      totalPages,
+      page: productsRaw.currentPage,
+      limit: productsRaw.limit
     })
   }
 
   return res.status(200).json({
     status: 'success',
     data: products,
-    dataCount
+    dataCount,
+    totalPages,
+    page: productsRaw.currentPage,
+    limit: productsRaw.limit
   })
 })
+
+function normalizeQuery(q) {
+  const out = { ...q }
+
+  // page / currentPage / limit 轉數字
+  if (out.currentPage != null) out.currentPage = parseInt(out.currentPage, 10)
+  if (out.page != null) {
+    out.currentPage = parseInt(out.page, 10)
+    delete out.page
+  }
+  if (out.limit != null) out.limit = parseInt(out.limit, 10)
+  if (out.price != null) out.price = JSON.parse(out.price)
+
+  // fields 可接受：JSON 陣列字串 或 逗點字串
+  if (typeof out.fields === 'string') {
+    const s = out.fields.trim()
+    if (s.startsWith('[')) {
+      out.fields = JSON.parse(s)
+    } else if (s.includes(',')) {
+      out.fields = s
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean)
+    }
+  }
+
+  // sort 可接受：JSON 物件字串 或 "price,-createdAt"
+  if (typeof out.sort === 'string') {
+    const s = out.sort.trim()
+    if (s.startsWith('{')) {
+      out.sort = JSON.parse(s)
+    } else if (s) {
+      const obj = {}
+      s.split(',')
+        .map((v) => v.trim())
+        .filter(Boolean)
+        .forEach((k) => {
+          if (k.startsWith('-')) obj[k.slice(1)] = -1
+          else obj[k] = 1
+        })
+      out.sort = obj
+    }
+  }
+
+  return out
+}
 
 // 查詢所有商品(後台)
 exports.findAllProductsAdmin = catchError(async (req, res, next) => {
@@ -413,7 +474,6 @@ exports.findAllProductsAdmin = catchError(async (req, res, next) => {
  */
 exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
   const productId = validateObjectId(req.body.productId, res)
-  console.log('productId', productId)
 
   const { checkFileResult, fileType, file } = checkFileToBeUploaded(req, res)
   if (!checkFileResult) return
@@ -442,8 +502,6 @@ exports.uploadProductMainPhotoAdmin = catchError(async (req, res, next) => {
       url: getAWSImageUrl(fileKey)
     }
   }
-
-  console.log('updateContent', updateContent)
 
   const productUpdated = await Products.findOneAndUpdate(
     { _id: productId },

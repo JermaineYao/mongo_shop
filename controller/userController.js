@@ -688,7 +688,17 @@ async function loginCheck(req, res, reqFrom = 'front') {
 
     const user = await Users.findOne(
       { _id: id },
-      { projection: { account: 1, photo: 1, active: 1 } }
+      {
+        projection: {
+          account: 1,
+          photo: 1,
+          active: 1,
+          phoneNumber: 1,
+          address: 1,
+          createAt: 1,
+          modifiedAt: 1
+        }
+      }
     )
 
     if (!user) {

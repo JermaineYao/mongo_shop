@@ -4,7 +4,8 @@ const product = require('../controller/productController')
 
 const {
   routerGuardAdmin,
-  isUserActive
+  isUserActive,
+  decodeCookie
 } = require('../controller/authController')
 
 const router = express.Router()
@@ -26,6 +27,16 @@ router.post(
   product.checkProductNameAdmin
 )
 
+// 查詢所有商品(前台)
+router.get('/all', decodeCookie, product.findAllProducts)
+// 查詢所有商品(後台)
+router.post(
+  '/all_admin',
+  routerGuardAdmin,
+  isUserActive(),
+  product.findAllProductsAdmin
+)
+
 // 查看單一產品(前台)
 router.get('/:productId', product.findOneProduct)
 // 查看單一產品(後台)
@@ -34,16 +45,6 @@ router.get(
   routerGuardAdmin,
   isUserActive(),
   product.findOneProductAdmin
-)
-
-// 查詢所有商品(前台)
-router.post('/all', product.findAllProducts)
-// 查詢所有商品(後台)
-router.post(
-  '/all_admin',
-  routerGuardAdmin,
-  isUserActive(),
-  product.findAllProductsAdmin
 )
 
 // 修改產品(後台)
@@ -65,17 +66,17 @@ router.patch(
 // 上傳主要圖片(後台)
 router.post(
   '/upload_main_photo_admin',
-  upload,
   routerGuardAdmin,
   isUserActive(),
+  upload,
   product.uploadProductMainPhotoAdmin
 )
 // 上傳次要圖片(後台)
 router.post(
   '/upload_sub_photo_admin',
-  upload,
   routerGuardAdmin,
   isUserActive(),
+  upload,
   product.uploadProductSubPhotoAdmin
 )
 

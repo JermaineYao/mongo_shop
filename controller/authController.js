@@ -50,6 +50,32 @@ async function guard(req, res, next, reqFrom = 'front') {
   next()
 }
 
+// 從 cookie 回傳 user
+exports.decodeCookie = catchError(async (req, res, next) => {
+  const userLogined = req.cookies['shop-jwt']
+
+  if (!userLogined) {
+    return next()
+  }
+
+  let decoded
+  try {
+    decoded = await promisify(jwt.verify)(userLogined, process.env.JWT_SECRET)
+  } catch (err) {
+    return next(new AppError('JWT 無效或已過期', 401))
+  }
+
+  const id = validateObjectId(decoded.id, res)
+  const Users = collection('users')
+
+  const user = await Users.findOne({ _id: id }, { projection: { pwd: 0 } })
+
+  // 准許進入 router
+  req.user = user
+
+  next()
+})
+
 //  路由使用權限限制, 需帳戶啟用
 exports.isUserActive = () => (req, res, next) => {
   if (!req.user.active) {

@@ -1,8 +1,9 @@
 const { ObjectId } = require('mongodb')
 const { collection } = require('./db')
+const { raw } = require('body-parser')
 
 class SearchDoc {
-  constructor(collectionName, queryString) {
+  constructor(collectionName, queryString, project = null) {
     this.collection = collection(collectionName)
     this.queryString = queryString
     this.page = 1
@@ -10,6 +11,7 @@ class SearchDoc {
     this.skip = 1
     this.query = {}
     this.cursor = null
+    this.project = project
   }
 
   buildQuery() {
@@ -64,8 +66,6 @@ class SearchDoc {
         if (Object.keys(v).length === 0) delete rawQuery[key]
         continue
       }
-
-      // 其他非純物件（例如 Map/Set/自訂類別）一律保留
     }
 
     // 把 'true'/'false' 字串轉成布林
@@ -87,6 +87,18 @@ class SearchDoc {
     for (const k of objectIdKeys) {
       if (rawQuery[k] && rawQuery[k] instanceof ObjectId) {
         preserveObjectIds[k] = rawQuery[k]
+      }
+    }
+
+    if (rawQuery['price']) {
+      if (typeof rawQuery['price'] === 'string') {
+        rawQuery['price'] = JSON.parse(rawQuery['price'])
+      }
+
+      if (typeof rawQuery['price'] === 'object') {
+        for (const priceKey in rawQuery['price']) {
+          rawQuery['price'][priceKey] = parseInt(rawQuery['price'][priceKey])
+        }
       }
     }
 
@@ -134,8 +146,7 @@ class SearchDoc {
 
   filter() {
     this.buildQuery()
-
-    this.cursor = this.collection.find(this.query)
+    this.cursor = this.collection.find(this.query, { projection: this.project })
     return this
   }
 
@@ -145,12 +156,10 @@ class SearchDoc {
 
     let sortOption = { createAt: -1 }
     if (this.queryString.sort) {
-      try {
-        sortOption =
-          typeof this.queryString.sort === 'string'
-            ? JSON.parse(this.queryString.sort)
-            : this.queryString.sort
-      } catch (_) {}
+      sortOption =
+        typeof this.queryString.sort === 'string'
+          ? JSON.parse(this.queryString.sort)
+          : this.queryString.sort
     }
 
     this.cursor = this.cursor.sort(sortOption)

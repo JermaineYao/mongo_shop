@@ -9,7 +9,7 @@ const cors = require('cors')
 app.use(
   cors({
     credentials: true,
-    origin: ['https:127.0.0.1:3000']
+    origin: ['https://127.0.0.1:3000', 'https://127.0.0.1:5000']
   })
 )
 
@@ -108,15 +108,23 @@ app.all('*', (req, res, next) => {
 })
 
 app.use((err, req, res, next) => {
-  console.error('錯誤訊息：', err)
+  // console.error('錯誤訊息：', err)
 
-  const statusCode = err.statusCode || 500
-  const status = err.status || 'error'
+  // const statusCode = err.statusCode || 500
+  // const status = err.status || 'error'
 
-  res.status(statusCode).json({
-    status,
-    message: err.message || '伺服器發生錯誤'
-  })
+  // res.status(statusCode).json({
+  //   status,
+  //   message: err.message || '伺服器發生錯誤'
+  // })
+
+  console.error('[ERR]', req.method, req.originalUrl)
+  console.error(err && err.stack) // ✅ 看堆疊，通常可直接定位檔案與行數
+  if (res.headersSent) return next(err)
+  const code = err.statusCode || 500
+  return res
+    .status(code)
+    .json({ status: 'failed', message: err.message || '伺服器發生錯誤' })
 })
 /*---------------------- 導出 app ----------------------*/
 module.exports = app
