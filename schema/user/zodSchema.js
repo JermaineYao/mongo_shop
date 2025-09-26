@@ -37,7 +37,7 @@ exports.createUserSchema = z
         return s === '' ? null : s
       })
       .refine((v) => v === null || /^09\d{2}-\d{3}-\d{3}$/.test(v), {
-        message: '手機格式錯誤'
+        message: '手機號碼格式 09xx-xxx-xxx'
       })
   })
   .strict() // 禁止多餘欄位
@@ -115,8 +115,8 @@ exports.updateUserSchema = z.object({
 // 忘記密碼(發送密碼設定連結至用戶信箱)
 exports.forgotPWDSchema = z
   .object({
-    email: z.string().trim().toLowerCase().email('信箱格式錯誤'),
-    routeWithHash: z.boolean()
+    email: z.string().trim().toLowerCase().email('信箱格式錯誤')
+    // routeWithHash: z.boolean()
   })
   .strict() // 禁止多餘欄位
 

@@ -409,8 +409,10 @@ function normalizeQuery(q) {
     out.currentPage = parseInt(out.page, 10)
     delete out.page
   }
+
   if (out.limit != null) out.limit = parseInt(out.limit, 10)
-  if (out.price != null) out.price = JSON.parse(out.price)
+  if (out.price != null && typeof out.price === 'string')
+    out.price = JSON.parse(out.price)
 
   // fields 可接受：JSON 陣列字串 或 逗點字串
   if (typeof out.fields === 'string') {

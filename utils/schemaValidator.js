@@ -1,4 +1,5 @@
 exports.schemaValidator = (res, schema, content) => {
+  console.log('content', content)
   const parsed = schema.safeParse(content)
 
   if (!parsed.success) {

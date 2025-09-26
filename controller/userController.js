@@ -152,7 +152,10 @@ async function checkOrCreateUser(mode, reqFrom, req, res) {
   if (!result.acknowledged) {
     return res.status(500).json({
       status: 'failed',
-      msg: '用戶新增失敗，請稍後再試'
+      msg:
+        reqFrom === 'front'
+          ? '註冊失敗，請稍後再試'
+          : '用戶新增失敗，請稍後再試'
     })
   }
 
@@ -191,7 +194,6 @@ async function queryAccount(req, res, reqFrom = 'user') {
     {
       projection: {
         pwd: 0,
-        createAt: 0,
         pwdChangeAt: 0
       }
     }
@@ -294,7 +296,7 @@ exports.updateUserPhotoAdmin = catchError(async (req, res, next) => {
  * @param {string} req.body.userId
  *
  * 前台
- * @param {string} req.body._id
+ * @param {string} req.user._id
  */
 async function updateUserPhotoObj(req, res, reqFrom = 'front') {
   const reqId = reqFrom === 'front' ? req.user._id : req.body.userId
@@ -848,13 +850,14 @@ exports.forgotPWDAdmin = catchError(async (req, res, next) => {
  * @param {string} req.body.email
  */
 async function sendEmailToResetPWD(req, res, reqFrom = 'front') {
+  console.log(req.body)
   const parsedData = schemaValidator(res, forgotPWDSchema, req.body)
   if (!parsedData) return
 
   const role = reqFrom === 'front' ? 'user' : 'admin'
 
-  const { email, routeWithHash } = parsedData
-  // const { email } = parsedData
+  const { email } = parsedData
+
   const Users = collection('users')
 
   const user = await Users.findOne({ email, role })
@@ -886,16 +889,17 @@ async function sendEmailToResetPWD(req, res, reqFrom = 'front') {
   }
 
   const subject = '請在 10分鐘內點擊連結, 並完成密碼設定'
-  const resetURL = routeWithHash
-    ? `${req.get('origin')}/#/set_pwd/${randomToken}`
-    : `${req.get('origin')}/set_pwd/${randomToken}`
-
-  // const resetURL = `${req.get('origin')}/set_pwd/${randomToken}`
+  const resetURL =
+    reqFrom === 'front'
+      ? `${req.get('origin')}/shop/forgot/set_pwd/${randomToken}`
+      : `${req.get('origin')}/#/set_pwd/${randomToken}`
 
   try {
     await new Email(userUpdated, resetURL).send('forgotPassword', subject)
 
-    return res.status(200).json({ status: 'success', msg: '已發送至信箱' })
+    return res
+      .status(200)
+      .json({ status: 'success', msg: '已設定連結發送至信箱' })
   } catch (err) {
     await Users.findOneAndUpdate(
       { email, role },

@@ -73,12 +73,12 @@ router.get('/my_account_admin', routerGuardAdmin, user.myAccount)
 router.post('/query_user', routerGuardAdmin, isUserActive(), user.findUserAdmin)
 
 // 停用,啟用 帳號(前台)
-router.patch('/user_enable', routerGuard, user.enableSwitchUser)
+router.patch('/my_account_enable', routerGuard, user.enableSwitchUser)
 // 停用,啟用 帳號(後台)
 router.patch('/user_enable_admin', routerGuardAdmin, user.enableSwitchUserAdmin)
 
 // 更新 user (地址, 電話)(前台)
-router.patch('/update_user_info', routerGuard, user.updateUser)
+router.patch('/update_my_contact', routerGuard, user.updateUser)
 // 更新 user (地址, 電話)(後台)
 router.patch('/update_user_info_admin', routerGuardAdmin, user.updateUserAdmin)
 
@@ -93,7 +93,7 @@ router.post(
 )
 
 // 刪除照片(前台)
-router.delete('/delete_user_photo', routerGuard, user.deleteUserPhoto)
+router.delete('/delete_my_photo', routerGuard, user.deleteUserPhoto)
 // 刪除照片(後台)
 router.delete(
   '/delete_user_photo_admin/:userId',
