@@ -95,6 +95,11 @@ const favoriteUrl = `${apiVersion}/favorite`
 const favoriateRouter = require('./route/favoriateRoute')
 app.use(favoriteUrl, favoriateRouter)
 
+// 購物車
+const cartUrl = `${apiVersion}/cart`
+const cartRouter = require('./route/cartRoute')
+app.use(cartUrl, cartRouter)
+
 // 訂單
 const orderUrl = `${apiVersion}/order`
 const orderRouter = require('./route/orderRoute')

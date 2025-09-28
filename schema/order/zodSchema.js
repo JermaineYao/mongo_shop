@@ -17,8 +17,6 @@ const ProductOrderedSchema = z
 // 建立訂單（從購物車生成 → 同時檢查庫存、扣減庫存）(前台)
 exports.createOrderSchema = z
   .object({
-    userId: z.string().optional(),
-
     productsOrdered: z.array(ProductOrderedSchema).min(1, '至少要有一項商品'),
 
     receiver: z.string().trim().min(2, '收件人至少 2 個字'),

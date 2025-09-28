@@ -17,10 +17,20 @@ const { validateObjectId } = require('../utils/utils.js')
 const SearchDoc = require('../utils/search')
 
 // 建立訂單（從購物車生成 → 同時檢查庫存、扣減庫存）(前台)
+/**
+ * @param {string} req.user._id
+ *
+ * @param {array<object>} req.body.productsOrdered
+ * [{productId, quantity}]
+ * @param {string} productId
+ * @param {number} quantity
+ *
+ * @param {string} req.body.receiver
+ * @param {string} req.body.receiverAddress
+ * @param {string} req.body.receiverPhoneNumber
+ * @param {string} req.body.note
+ */
 exports.createOrder = catchError(async (req, res, next) => {
-  // const userId = validateObjectId(req.body.userId, res)
-  // const Users = collection('users')
-  // const user = await Users.findOne({ _id: userId, active: true })
   const userId = validateObjectId(req.user._id, res)
   const user = req.user
 
@@ -56,17 +66,20 @@ exports.createOrder = catchError(async (req, res, next) => {
 
   // 訂購商品中, 仍在架販售中的商品
   const productDocs = await Products.find(
-    { _id: { $in: productsIds }, enable: true },
+    { _id: { $in: productsIds }, enable: true, inStock: { $gt: 0 } },
     {
       projection: {
         productNameMain: 1,
         productNameSub: 1,
         price: 1,
+        category: 1,
         mainPhoto: 1,
         inStock: 1
       }
     }
   ).toArray()
+
+  console.log('productDocs', productDocs)
 
   // 建立 productId -> doc 快取
   const productMap = new Map(productDocs.map((p) => [p._id.toString(), p]))
@@ -75,23 +88,28 @@ exports.createOrder = catchError(async (req, res, next) => {
   const orderItems = productsOrdered.map((item) => {
     const p = productMap.get(item.productId)
     if (!p) {
-      return res.status(400).json({
-        status: 'failed',
-        msg: '商品不存在或已下架'
-      })
-      // throw new AppError('有商品不存在或已下架', 400)
+      // return res.status(400).json({
+      //   status: 'failed',
+      //   msg: '商品不存在或已下架'
+      // })
+      throw new AppError('有商品不存在或已下架', 400)
     }
 
     if (p.inStock < item.quantity) {
-      return res.status(400).json({
-        status: 'failed',
-        inStock: p.inStock,
-        orderQuantity: item.quantity,
-        productId: p._id,
-        msg: `${p.productNameMain} ${p.productNameSub} 庫存不足, 庫存 ${p.inStock}`
-      })
-      // throw new AppError('庫存不足', 400)
+      // return res.status(400).json({
+      //   status: 'failed',
+      //   inStock: p.inStock,
+      //   orderQuantity: item.quantity,
+      //   productId: p._id,
+      //   msg: `${p.productNameMain} ${p.productNameSub} 庫存不足, 庫存 ${p.inStock}`
+      // })
+      throw new AppError(
+        `${p.productNameMain} ${p.productNameSub} 庫存不足, 庫存 ${p.inStock}`,
+        400
+      )
     }
+
+    console.log('item', item)
 
     const price = Number(p.price)
     return {
@@ -102,6 +120,7 @@ exports.createOrder = catchError(async (req, res, next) => {
       mainPhoto: {
         url: p.mainPhoto.url
       },
+      category: p.category,
       quantity: item.quantity,
       subtotal: price * item.quantity
     }
@@ -110,11 +129,11 @@ exports.createOrder = catchError(async (req, res, next) => {
   // 3) 計算總金額（> 0）
   const totalAmount = orderItems.reduce((s, it) => s + it.subtotal, 0)
   if (!(totalAmount > 0)) {
-    return res.status(400).json({
-      status: 'failed',
-      msg: '總金額必須 > 0'
-    })
-    // throw new AppError('總金額必須 > 0', 400)
+    // return res.status(400).json({
+    //   status: 'failed',
+    //   msg: '總金額必須 > 0'
+    // })
+    throw new AppError('總金額必須 > 0', 400)
   }
 
   // 4) 準備訂單文件
@@ -123,7 +142,7 @@ exports.createOrder = catchError(async (req, res, next) => {
   const { receiver, receiverAddress, receiverPhoneNumber, note } = parsedData
 
   const orderDoc = {
-    orderNo: genOrderNo(),
+    orderNo: getOrderNo(),
     account: user.account,
     email: user.email,
     userId,
@@ -160,11 +179,11 @@ exports.createOrder = catchError(async (req, res, next) => {
       const r = await Products.bulkWrite(ops, { session, ordered: false })
       // 所有商品都必須成功扣到，否則視為庫存不足（觸發回滾）
       if (r.modifiedCount !== orderItems.length) {
-        // throw new AppError('庫存不足或商品狀態變動，請重新整理購物車', 409)
-        return res.status(409).json({
-          status: 'failed',
-          msg: '庫存不足或商品狀態變動，請重新整理購物車'
-        })
+        throw new AppError('庫存不足或商品狀態變動，請重新整理購物車', 409)
+        // return res.status(409).json({
+        //   status: 'failed',
+        //   msg: '庫存不足或商品狀態變動，請重新整理購物車'
+        // })
       }
 
       // (B) 寫入訂單（處理 orderNo 撞號重試一次）
@@ -174,7 +193,7 @@ exports.createOrder = catchError(async (req, res, next) => {
       } catch (e) {
         if (e.code === 11000) {
           // orderNo unique 衝突
-          orderDoc.orderNo = genOrderNo()
+          orderDoc.orderNo = getOrderNo()
           const ins = await Orders.insertOne(orderDoc, { session })
           insertedId = ins.insertedId
         } else {
@@ -186,6 +205,9 @@ exports.createOrder = catchError(async (req, res, next) => {
     await session.endSession()
   }
 
+  const Carts = collection('carts')
+  await Carts.deleteMany({ userId })
+
   // 6) 成功
   return res.status(201).json({
     status: 'success',
@@ -195,7 +217,7 @@ exports.createOrder = catchError(async (req, res, next) => {
   })
 })
 
-function genOrderNo() {
+function getOrderNo() {
   const d = new Date()
   const pad = (n) => String(n).padStart(2, '0')
   const y = d.getUTCFullYear()
@@ -257,20 +279,22 @@ async function findOne(req, res, reqFrom = 'front') {
   POST /my_orders
 */
 exports.findMyOrders = catchError(async (req, res, next) => {
-  const userId = validateObjectId(req.body.userId, res)
-  // const userId = validateObjectId(req.user._id, res)
+  // const userId = validateObjectId(req.body.userId, res)
+  const userId = validateObjectId(req.user._id, res)
 
-  const queryCondition = { ...req.body }
-  queryCondition.userId = userId
+  // const queryCondition = { ...req.body }
+  // queryCondition.userId = userId
 
-  const orders = new SearchDoc('orders', queryCondition)
-  const dataCount = await orders.countDocuments()
-  const data = await orders.filter().sort().limitFields().pagination().exec()
+  // const orders = new SearchDoc('orders', queryCondition)
+  // const dataCount = await orders.countDocuments()
+  // const data = await orders.filter().sort().limitFields().pagination().exec()
+  const Orders = collection('orders')
+  const data = await Orders.find({ userId }).sort({ updatedAt: 1 }).toArray()
+  console.log('data', data)
 
   return res.status(200).json({
     status: 'success',
-    data,
-    dataCount
+    data
   })
 })
 

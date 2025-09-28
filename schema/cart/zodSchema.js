@@ -3,10 +3,10 @@ const { isValidObjectId } = require('../../utils/utils')
 
 exports.createCartSchema = z
   .object({
-    userId: z
-      .string()
-      .refine(isValidObjectId, { message: 'userId 格式錯誤' })
-      .optional(),
+    // userId: z
+    //   .string()
+    //   .refine(isValidObjectId, { message: 'userId 格式錯誤' })
+    //   .optional(),
 
     productId: z
       .string()

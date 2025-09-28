@@ -1,6 +1,6 @@
 exports.cartJsonSchema = {
   $jsonSchema: {
-    $bsonType: 'object',
+    bsonType: 'object',
     required: ['userId', 'productId', 'quantity'],
     properties: {
       _id: { bsonType: 'objectId' },

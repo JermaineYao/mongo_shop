@@ -8,6 +8,10 @@ const { schemaValidator } = require('../utils/schemaValidator')
 const { validateObjectId } = require('../utils/utils')
 
 // 新增,移除 我的最愛 (前台)
+/**
+ * @param {string} req.user._id
+ * @param {string} req.body.productId
+ */
 exports.toggleFavorite = catchError(async (req, res, next) => {
   const favoritesExist = await collectionExists('favorites')
 
@@ -23,17 +27,16 @@ exports.toggleFavorite = catchError(async (req, res, next) => {
       .createIndex({ userId: 1, productId: 1 }, { unique: true })
   }
 
+  const userId = validateObjectId(req.user._id, res)
+
   const parsedData = schemaValidator(res, createFavoriteSchema, {
-    productId: req.body.productId,
-    // userId: req.user._id
-    userId: req.body.userId
+    productId: req.body.productId
   })
   if (!parsedData) return
 
   const Products = collection('products')
   const Favorites = collection('favorites')
   const now = new Date()
-  const userId = validateObjectId(parsedData.userId)
   const productId = validateObjectId(parsedData.productId)
 
   const product = await Products.findOne({ _id: productId })
@@ -82,9 +85,11 @@ exports.toggleFavorite = catchError(async (req, res, next) => {
 })
 
 // 查詢我的最愛
+/**
+ * @param {string} req.user._id
+ */
 exports.findFavorites = catchError(async (req, res, next) => {
-  const userId = validateObjectId(req.body.userId, res)
-  // const userId = validateObjectId(req.user._id, res)
+  const userId = validateObjectId(req.user._id, res)
 
   const Favorites = collection('favorites')
 
@@ -94,29 +99,76 @@ exports.findFavorites = catchError(async (req, res, next) => {
     {
       $lookup: {
         from: 'products',
-        localField: 'productId',
-        foreignField: '_id',
+        let: { pid: '$productId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [{ $eq: ['$_id', '$$pid'] }, { $eq: ['$enable', true] }]
+              }
+            }
+          },
+          {
+            $project: {
+              _id: 1,
+              productNameMain: 1,
+              productNameSub: 1,
+              category: 1,
+              price: 1,
+              inStock: 1,
+              enable: 1,
+              mainPhoto: 1
+            }
+          }
+        ],
         as: 'product'
       }
     },
+    { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } },
     {
-      $unwind: {
-        path: '$product',
-        preserveNullAndEmptyArrays: true
+      $match: { 'product.enable': true }
+    },
+    {
+      $lookup: {
+        from: 'carts',
+        let: { pid: '$product._id', uid: '$userId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$productId', '$$pid'] },
+                  { $eq: ['$userId', '$$uid'] }
+                ]
+              }
+            }
+          },
+          { $project: { _id: 1, quantity: 1 } },
+          { $limit: 1 }
+        ],
+        as: 'isInCart'
+      }
+    },
+    {
+      $addFields: {
+        inCart: { $gt: [{ $size: '$isInCart' }, 0] }
       }
     },
     {
       $project: {
         _id: 0,
-        favoriteId: '$_id', // Favorites 的 _id
-        productId: '$product._id', // product 的 _id
-        productNameMain: '$product.productNameMain',
-        productNameSub: '$product.productNameSub',
-        category: '$product.category',
-        price: '$product.price',
-        inStock: '$product.inStock',
-        enable: '$product.enable',
-        mainPhoto: '$product.mainPhoto'
+        favoriteId: '$_id',
+        product: {
+          productId: '$product._id',
+          productNameMain: '$product.productNameMain',
+          productNameSub: '$product.productNameSub',
+          category: '$product.category',
+          price: '$product.price',
+          inStock: '$product.inStock',
+          enable: '$product.enable',
+          mainPhoto: '$product.mainPhoto'
+        },
+        inCart: 1
       }
     }
   ]).toArray()
@@ -129,9 +181,11 @@ exports.findFavorites = catchError(async (req, res, next) => {
 })
 
 // 清空我的最愛
+/**
+ * @param {string} req.user._id
+ */
 exports.clearMyFavorites = catchError(async (req, res, next) => {
-  const userId = validateObjectId(req.body.userId, res)
-  // const userId = validateObjectId(req.user._id, res)
+  const userId = validateObjectId(req.user._id, res)
 
   const Favorites = collection('favorites')
   await Favorites.deleteMany({ userId })

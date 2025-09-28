@@ -34,6 +34,7 @@ exports.orderJsonSchema = {
             'productId',
             'productNameMain',
             'productNameSub',
+            'category',
             'price',
             'quantity',
             'subtotal'
@@ -42,6 +43,11 @@ exports.orderJsonSchema = {
             productId: { bsonType: 'objectId' },
             productNameMain: { bsonType: 'string' },
             productNameSub: { bsonType: 'string' },
+            category: {
+              bsonType: 'string',
+              enum: ['0', '1', '2'],
+              description: '必填，商品分類  0 碗, 1 瓶子, 2 杯子'
+            },
             price: { bsonType: ['int', 'long', 'double'], minimum: 0 },
             mainPhoto: {
               bsonType: 'object',

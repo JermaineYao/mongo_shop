@@ -5,6 +5,7 @@ const AppError = require('../utils/appError')
 
 const { validateObjectId } = require('../utils/utils.js')
 const { collection } = require('../utils/db')
+const { signout } = require('./userController')
 
 // 路由守衛(前台)
 exports.routerGuard = catchError(async (req, res, next) => {
@@ -62,7 +63,8 @@ exports.decodeCookie = catchError(async (req, res, next) => {
   try {
     decoded = await promisify(jwt.verify)(userLogined, process.env.JWT_SECRET)
   } catch (err) {
-    return next(new AppError('JWT 無效或已過期', 401))
+    signout(req, res)
+    return next()
   }
 
   const id = validateObjectId(decoded.id, res)

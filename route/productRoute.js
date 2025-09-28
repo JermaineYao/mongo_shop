@@ -38,7 +38,7 @@ router.post(
 )
 
 // 查看單一產品(前台)
-router.get('/:productId', product.findOneProduct)
+router.get('/:productId', decodeCookie, product.findOneProduct)
 // 查看單一產品(後台)
 router.get(
   '/product_admin/:productId',

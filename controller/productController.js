@@ -318,6 +318,7 @@ exports.findOneProductAdmin = catchError(async (req, res, next) => {
  */
 async function findOne(req, res, reqFrom = 'front') {
   const id = validateObjectId(req.params.productId, res)
+  const userId = req.user ? new ObjectId(req.user._id) : null
 
   const queryCondition =
     reqFrom === 'front' ? { _id: id, enable: true } : { _id: id }
@@ -330,6 +331,32 @@ async function findOne(req, res, reqFrom = 'front') {
   }
 
   const data = renameId('productId', product)
+
+  if (userId) {
+    const Favorites = collection('favorites')
+    const Carts = collection('carts')
+
+    const [favoriteRaw, cartRaw] = await Promise.all([
+      Favorites.findOne(
+        { userId, productId: id },
+        { projection: { productId: 1 } }
+      ),
+      Carts.findOne({ userId, productId: id }, { projection: { productId: 1 } })
+    ])
+
+    console.log(favoriteRaw, cartRaw)
+
+    return res.status(200).json({
+      status: 'success',
+      msg: '查詢成功',
+      data: {
+        ...data,
+        addedToCart: cartRaw ? true : false,
+        addedToFavorite: favoriteRaw ? true : false
+      }
+    })
+  }
+
   return res.status(200).json({ status: 'success', msg: '查詢成功', data })
 }
 

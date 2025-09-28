@@ -8,6 +8,11 @@ const { schemaValidator } = require('../utils/schemaValidator')
 const { validateObjectId } = require('../utils/utils')
 
 // 新增,修改 購物車 (前台)
+/**
+ * @param {string} req.user._id
+ * @param {string} req.body.productId
+ * @param {number} req.body.quantity
+ */
 exports.addOrUpdateCart = catchError(async (req, res, next) => {
   const cartsExist = await collectionExists('carts')
 
@@ -26,19 +31,22 @@ exports.addOrUpdateCart = catchError(async (req, res, next) => {
   const parsedData = schemaValidator(res, createCartSchema, req.body)
   if (!parsedData) return
 
+  const userId = validateObjectId(req.user._id, res)
+
   const Products = collection('products')
   const Carts = collection('carts')
   const now = new Date()
   const { quantity } = parsedData
-  const userId = validateObjectId(parsedData.userId)
   const productId = validateObjectId(parsedData.productId)
 
   const product = await Products.findOne({
-    _id: productId
+    _id: productId,
+    enable: true,
+    inStock: { $gt: 0 }
   })
 
   if (!product) {
-    return res.status(404).json({ status: 'failed', msg: '商品已下架' })
+    return res.status(404).json({ status: 'failed', msg: '商品已下架或已售完' })
   }
 
   const cart = await Carts.findOneAndUpdate(
@@ -59,15 +67,17 @@ exports.addOrUpdateCart = catchError(async (req, res, next) => {
 })
 
 // 查詢我的購物車 (前台)
+/**
+ * @param {string} req.user._id
+ */
 exports.findCarts = catchError(async (req, res, next) => {
-  const userId = validateObjectId(req.body.userId, res)
-  // const userId = validateObjectId(req.user._id, res)
+  const userId = validateObjectId(req.user._id, res)
 
   const Carts = collection('carts')
 
   const data = await Carts.aggregate([
     { $match: { userId } },
-    { $sort: { addedAt: -1 } },
+    // { $sort: { addedAt: -1 } },
     {
       $lookup: {
         from: 'products',
@@ -83,17 +93,23 @@ exports.findCarts = catchError(async (req, res, next) => {
       }
     },
     {
-      _id: 0,
-      cartId: '$_id',
-      productId: '$product._id',
-      productNameMain: '$product.productNameMain',
-      productNameSub: '$product.productNameSub',
-      category: '$product.category',
-      price: '$product.price',
-      inStock: '$product.inStock',
-      enable: '$product.enable',
-      mainPhoto: '$product.mainPhoto',
-      totalPrice: { $multiply: ['$product.price', '$quantity'] }
+      $match: { 'product.enable': true }
+    },
+    {
+      $project: {
+        _id: 0,
+        cartId: '$_id',
+        productId: '$product._id',
+        productNameMain: '$product.productNameMain',
+        productNameSub: '$product.productNameSub',
+        category: '$product.category',
+        price: '$product.price',
+        inStock: '$product.inStock',
+        enable: '$product.enable',
+        mainPhoto: '$product.mainPhoto',
+        quantity: '$quantity',
+        totalPrice: { $multiply: ['$product.price', '$quantity'] }
+      }
     },
     {
       $group: {
@@ -101,15 +117,17 @@ exports.findCarts = catchError(async (req, res, next) => {
         products: {
           $push: {
             cartId: '$cartId',
-            productId: '$productId',
-            productNameMain: '$productNameMain',
-            productNameSub: '$productNameSub',
-            category: '$category',
-            price: '$price',
+            product: {
+              productId: '$productId',
+              productNameMain: '$productNameMain',
+              productNameSub: '$productNameSub',
+              category: '$category',
+              price: '$price',
+              inStock: '$inStock',
+              enable: '$enable',
+              mainPhoto: '$mainPhoto'
+            },
             quantity: '$quantity',
-            inStock: '$inStock',
-            enable: '$enable',
-            mainPhoto: '$mainPhoto',
             totalPrice: '$totalPrice'
           }
         },
@@ -129,20 +147,33 @@ exports.findCarts = catchError(async (req, res, next) => {
     }
   ]).toArray()
 
+  const result = data[0] || {
+    products: [],
+    summary: {
+      totalQuantity: 0,
+      grandTotal: 0
+    }
+  }
+
   return res.status(200).json({
     status: 'success',
     msg: '查詢成功',
-    data
+    data: result
   })
 })
 
 // 移除該購物車項目 (前台)
+/**
+ * @param {string} req.user._id
+ * @param {string} req.body.cartId
+ */
 exports.deleteCart = catchError(async (req, res, next) => {
-  const cartId = validateObjectId(req.body.cartId)
+  const userId = validateObjectId(req.user._id, res)
+  const cartId = validateObjectId(req.body.cartId, res)
 
   const Carts = collection('carts')
 
-  const deleteResult = await Carts.deleteOne({ _id: cartId })
+  const deleteResult = await Carts.deleteOne({ _id: cartId, userId })
 
   if (deleteResult.deletedCount === 0) {
     return res.status(404).json({
@@ -158,9 +189,11 @@ exports.deleteCart = catchError(async (req, res, next) => {
 })
 
 // 清空我的購物車 (前台)
+/**
+ * @param {string} req.user._id
+ */
 exports.clearMyCarts = catchError(async (req, res, next) => {
-  const userId = validateObjectId(req.body.userId, res)
-  // const userId = validateObjectId(req.user._id, res)
+  const userId = validateObjectId(req.user._id, res)
 
   const Carts = collection('carts')
   await Carts.deleteMany({ userId })
