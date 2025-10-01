@@ -36,7 +36,7 @@ router.post(
 
 // 修改訂單狀態 (前台)
 router.patch(
-  '/order/:id/status/:status',
+  '/:id/status/:status',
   routerGuard,
   isUserActive(),
   order.updateOrderStatus

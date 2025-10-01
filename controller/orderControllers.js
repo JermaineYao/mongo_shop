@@ -79,37 +79,19 @@ exports.createOrder = catchError(async (req, res, next) => {
     }
   ).toArray()
 
-  console.log('productDocs', productDocs)
-
   // 建立 productId -> doc 快取
   const productMap = new Map(productDocs.map((p) => [p._id.toString(), p]))
 
   // 2) 組成訂單明細 + 基本檢查
   const orderItems = productsOrdered.map((item) => {
     const p = productMap.get(item.productId)
-    if (!p) {
-      // return res.status(400).json({
-      //   status: 'failed',
-      //   msg: '商品不存在或已下架'
-      // })
-      throw new AppError('有商品不存在或已下架', 400)
-    }
+    if (!p) throw new AppError('有商品不存在或已下架', 400)
 
-    if (p.inStock < item.quantity) {
-      // return res.status(400).json({
-      //   status: 'failed',
-      //   inStock: p.inStock,
-      //   orderQuantity: item.quantity,
-      //   productId: p._id,
-      //   msg: `${p.productNameMain} ${p.productNameSub} 庫存不足, 庫存 ${p.inStock}`
-      // })
+    if (p.inStock < item.quantity)
       throw new AppError(
         `${p.productNameMain} ${p.productNameSub} 庫存不足, 庫存 ${p.inStock}`,
         400
       )
-    }
-
-    console.log('item', item)
 
     const price = Number(p.price)
     return {
@@ -128,13 +110,7 @@ exports.createOrder = catchError(async (req, res, next) => {
 
   // 3) 計算總金額（> 0）
   const totalAmount = orderItems.reduce((s, it) => s + it.subtotal, 0)
-  if (!(totalAmount > 0)) {
-    // return res.status(400).json({
-    //   status: 'failed',
-    //   msg: '總金額必須 > 0'
-    // })
-    throw new AppError('總金額必須 > 0', 400)
-  }
+  if (!(totalAmount > 0)) throw new AppError('總金額必須 > 0', 400)
 
   // 4) 準備訂單文件
   const Orders = collection('orders')
@@ -178,13 +154,8 @@ exports.createOrder = catchError(async (req, res, next) => {
 
       const r = await Products.bulkWrite(ops, { session, ordered: false })
       // 所有商品都必須成功扣到，否則視為庫存不足（觸發回滾）
-      if (r.modifiedCount !== orderItems.length) {
+      if (r.modifiedCount !== orderItems.length)
         throw new AppError('庫存不足或商品狀態變動，請重新整理購物車', 409)
-        // return res.status(409).json({
-        //   status: 'failed',
-        //   msg: '庫存不足或商品狀態變動，請重新整理購物車'
-        // })
-      }
 
       // (B) 寫入訂單（處理 orderNo 撞號重試一次）
       try {
@@ -279,18 +250,10 @@ async function findOne(req, res, reqFrom = 'front') {
   POST /my_orders
 */
 exports.findMyOrders = catchError(async (req, res, next) => {
-  // const userId = validateObjectId(req.body.userId, res)
   const userId = validateObjectId(req.user._id, res)
 
-  // const queryCondition = { ...req.body }
-  // queryCondition.userId = userId
-
-  // const orders = new SearchDoc('orders', queryCondition)
-  // const dataCount = await orders.countDocuments()
-  // const data = await orders.filter().sort().limitFields().pagination().exec()
   const Orders = collection('orders')
   const data = await Orders.find({ userId }).sort({ updatedAt: 1 }).toArray()
-  console.log('data', data)
 
   return res.status(200).json({
     status: 'success',
@@ -333,10 +296,13 @@ function canTransit(from, to) {
 }
 
 // 修改訂單狀態 (前台)
-/*
-  PATCH /order/:id/status/:status
-  body: { newStatus: 'cancelled' }
-*/
+/**
+ * PATCH /order_admin/:id/status/:status
+ * @param {string} req.params.id
+ *
+ * 下個訂單狀態
+ * @param {string<newStatus: 'cancelled'>} req.params.status
+ */
 exports.updateOrderStatus = catchError(async (req, res, next) => {
   await setOrderStatus(req, res)
 })
@@ -370,20 +336,11 @@ async function setOrderStatus(req, res, reqFrom = 'front') {
     { _id: id },
     { projection: { orderStatus: 1, productsOrdered: 1 } }
   )
-  if (!order) {
-    return res.status(404).json({
-      status: 'failed',
-      msg: '訂單不存在'
-    })
-  }
+  if (!order) throw new AppErr(404, '訂單不存在')
 
   const from = order.orderStatus
-  if (!canTransit(from, newStatus)) {
-    return res.status(400).json({
-      status: 'failed',
-      msg: `狀態不可由 ${from} → ${newStatus}`
-    })
-  }
+  if (!canTransit(from, newStatus))
+    new AppErr(400, `狀態不可由 ${from} → ${newStatus}`)
 
   // 2) 非取消：單純更新狀態
   if (newStatus !== 'cancelled') {
@@ -392,19 +349,10 @@ async function setOrderStatus(req, res, reqFrom = 'front') {
       { $set: { orderStatus: newStatus, updatedAt: new Date() } }
     )
 
-    if (result.matchedCount === 0) {
-      return res.status(409).json({
-        status: 'failed',
-        msg: '訂單不存在或狀態已改變，請重新整理'
-      })
-    }
+    if (result.matchedCount === 0)
+      throw new AppErr(409, '訂單不存在或狀態已改變，請重新整理')
 
-    if (result.modifiedCount === 0) {
-      return res.status(400).json({
-        status: 'failed',
-        msg: '狀態沒有變化'
-      })
-    }
+    if (result.modifiedCount === 0) throw new AppErr(400, '狀態沒有變化')
 
     return res.status(200).json({
       status: 'success',
@@ -442,13 +390,8 @@ async function setOrderStatus(req, res, reqFrom = 'front') {
         { session }
       )
 
-      if (r.modifiedCount === 0) {
-        // 若狀態被別人先改了，丟錯觸發回滾（庫存不會被多加）
-        return res.status(409).json({
-          status: 'failed',
-          msg: '狀態已變更，請重新整理頁面'
-        })
-      }
+      if (r.modifiedCount === 0)
+        throw new AppErr(409, '狀態已變更，請重新整理頁面')
     })
   } finally {
     await session.endSession()

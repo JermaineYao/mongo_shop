@@ -63,7 +63,7 @@ exports.decodeCookie = catchError(async (req, res, next) => {
   try {
     decoded = await promisify(jwt.verify)(userLogined, process.env.JWT_SECRET)
   } catch (err) {
-    signout(req, res)
+    clearAuthCookie(res)
     return next()
   }
 
@@ -72,11 +72,23 @@ exports.decodeCookie = catchError(async (req, res, next) => {
 
   const user = await Users.findOne({ _id: id }, { projection: { pwd: 0 } })
 
+  if (!user) {
+    clearAuthCookie(res)
+    return next()
+  }
+
   // 准許進入 router
   req.user = user
-
   next()
 })
+
+function clearAuthCookie(res) {
+  res.clearCookie('shop-jwt', {
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  })
+}
 
 //  路由使用權限限制, 需帳戶啟用
 exports.isUserActive = () => (req, res, next) => {

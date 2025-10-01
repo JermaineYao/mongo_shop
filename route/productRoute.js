@@ -29,6 +29,7 @@ router.post(
 
 // 查詢所有商品(前台)
 router.get('/all', decodeCookie, product.findAllProducts)
+
 // 查詢所有商品(後台)
 router.post(
   '/all_admin',

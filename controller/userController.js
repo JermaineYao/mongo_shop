@@ -634,11 +634,7 @@ function getJWT(id) {
 function setTokenInCookie(req, res, user, statusCode, msg, reqFrom = 'front') {
   const token = getJWT(user._id)
 
-  const expiresInDays = 60
-  const msInOneDay = 24 * 60 * 60 * 1000
-  const expiresDate = new Date(
-    getTaiwanTimestamp() + expiresInDays * msInOneDay
-  )
+  const expiresDate = new Date(getTaiwanTimestamp() + 48 * 60 * 60 * 1000)
 
   const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
 
