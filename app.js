@@ -105,7 +105,12 @@ const orderUrl = `${apiVersion}/order`
 const orderRouter = require('./route/orderRoute')
 app.use(orderUrl, orderRouter)
 
-// 2) favicon 直接 204，不記錯
+// 給根路徑一個簡單回應（避免訪問 / 就進 404）
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'mongo-shop-api' })
+})
+
+// favicon 直接 204，不記錯
 app.get('/favicon.ico', (req, res) => res.status(204).end())
 
 // /* --------------- 處理不存在的網址請求 ---------------*/
