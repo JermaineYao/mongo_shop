@@ -560,17 +560,17 @@ function logout(req, res, reqFrom = 'front') {
   const jwtName = reqFrom === 'front' ? 'shop-jwt' : 'shop-admin-jwt'
   const jwtOut = reqFrom === 'front' ? 'logout-jwt' : 'logout-admin-jwt'
 
+  const expiresDate = new Date(getTaiwanTimestamp() + 0.5 * 1000)
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
+
   res.cookie(jwtName, jwtOut, {
-    expires: new Date(Date.now() + 0.5 * 1000),
-    secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
-    sameSite: 'none',
+    expires: expiresDate,
+    secure: isSecure, // 僅在 HTTPS 下設為 true
+    sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
     httpOnly: true
   })
 
-  return res.status(200).json({
-    status: 'success',
-    msg: '已登出'
-  })
+  return res.status(200).json({ status: 'success', msg: '已登出' })
 }
 
 // 登入(前台)
