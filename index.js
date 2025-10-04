@@ -36,7 +36,11 @@ process.on('uncaughtException', (err) => {
 
 connectDB()
 
-const server = app.listen(1000, '127.0.0.1', () => {
+// const server = app.listen(1000, '127.0.0.1', () => {
+//   console.log('server is on')
+// })
+
+const server = app.listen(() => {
   console.log('server is on')
 })
 
