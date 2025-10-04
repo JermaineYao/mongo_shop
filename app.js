@@ -105,6 +105,9 @@ const orderUrl = `${apiVersion}/order`
 const orderRouter = require('./route/orderRoute')
 app.use(orderUrl, orderRouter)
 
+// 2) favicon 直接 204，不記錯
+app.get('/favicon.ico', (req, res) => res.status(204).end())
+
 // /* --------------- 處理不存在的網址請求 ---------------*/
 const AppError = require('./utils/appError')
 
