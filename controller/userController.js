@@ -564,7 +564,18 @@ function logout(req, res, reqFrom = 'front') {
 
   const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
 
-  res.cookie(jwtName, jwtOut, {
+  // res.cookie(jwtName, jwtOut, {
+  //   domain: process.env.COOKIE_DOMAIN || undefined,
+  //   path: '/',
+  //   maxAge: 0,
+  //   expires: new Date(0),
+  //   // expires: expiresDate,
+  //   secure: isSecure, // 僅在 HTTPS 下設為 true
+  //   sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
+  //   httpOnly: true
+  // })
+
+  res.clearCookie(jwtName, {
     domain: process.env.COOKIE_DOMAIN || undefined,
     path: '/',
     maxAge: 0,
