@@ -344,8 +344,6 @@ async function findOne(req, res, reqFrom = 'front') {
       Carts.findOne({ userId, productId: id }, { projection: { productId: 1 } })
     ])
 
-    console.log(favoriteRaw, cartRaw)
-
     return res.status(200).json({
       status: 'success',
       msg: '查詢成功',

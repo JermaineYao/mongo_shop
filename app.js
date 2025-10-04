@@ -9,7 +9,7 @@ const cors = require('cors')
 app.use(
   cors({
     credentials: true,
-    origin: ['https://127.0.0.1:3000', 'https://127.0.0.1:5000']
+    origin: [process.env.URLP, process.env.URLF]
   })
 )
 

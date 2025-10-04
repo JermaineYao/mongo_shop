@@ -846,7 +846,6 @@ exports.forgotPWDAdmin = catchError(async (req, res, next) => {
  * @param {string} req.body.email
  */
 async function sendEmailToResetPWD(req, res, reqFrom = 'front') {
-  console.log(req.body)
   const parsedData = schemaValidator(res, forgotPWDSchema, req.body)
   if (!parsedData) return
 
