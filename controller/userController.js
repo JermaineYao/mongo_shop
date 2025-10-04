@@ -560,12 +560,16 @@ function logout(req, res, reqFrom = 'front') {
   const jwtName = reqFrom === 'front' ? 'shop-jwt' : 'shop-admin-jwt'
   const jwtOut = reqFrom === 'front' ? 'logout-jwt' : 'logout-admin-jwt'
 
-  const expiresDate = new Date(getTaiwanTimestamp() + 0.5 * 1000)
+  // const expiresDate = new Date(getTaiwanTimestamp() + 0.5 * 1000)
 
   const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
 
   res.cookie(jwtName, jwtOut, {
-    expires: expiresDate,
+    domain: process.env.COOKIE_DOMAIN || undefined,
+    path: '/',
+    maxAge: 0,
+    expires: new Date(0),
+    // expires: expiresDate,
     secure: isSecure, // 僅在 HTTPS 下設為 true
     sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
     httpOnly: true
