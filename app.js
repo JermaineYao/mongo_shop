@@ -1,6 +1,8 @@
 /*---------------------- 執行 express ----------------------*/
 const express = require('express')
 const app = express() // 執行同時建立 server
+app.set('trust proxy', 1)
+
 const path = require('path')
 
 /*---------------------- 跨域cors ----------------------*/
