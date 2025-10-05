@@ -579,6 +579,7 @@ function logout(req, res, reqFrom = 'front') {
     httpOnly: true,
     path: '/'
   })
+  res.setHeader('Cache-Control', 'no-store')
 
   return res.status(200).json({ status: 'success', msg: '已登出' })
 }
