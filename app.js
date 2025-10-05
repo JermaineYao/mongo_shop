@@ -62,7 +62,6 @@ app.use((req, res, next) => {
   const timezoneOffset = 480 // 台灣與 UTC 的差距為 480 分鐘
   const taiwanTime = new Date(now.getTime() + timezoneOffset * 60 * 1000) // 台灣時間
   req.requestTime = taiwanTime
-  console.log(taiwanTime)
 
   next()
 })
