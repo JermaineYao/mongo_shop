@@ -38,7 +38,7 @@ router.post('/sign_in', user.signIn)
 router.post('/sign_in_admin', user.signInAdmin)
 
 // 登出(前台)
-router.get('/sign_out', user.signout)
+router.post('/sign_out', user.signout)
 // 登出(後台)
 router.get('/sign_out_admin', user.signoutAdmin)
 
