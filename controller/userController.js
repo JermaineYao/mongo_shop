@@ -563,8 +563,17 @@ function logout(req, res, reqFrom = 'front') {
   const expiresDate = new Date(getTaiwanTimestamp() + 0.5 * 1000)
   const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
 
-  res.cookie(jwtName, jwtOut, {
-    expires: expiresDate,
+  // res.cookie(jwtName, jwtOut, {
+  //   expires: expiresDate,
+  //   secure: isSecure, // 僅在 HTTPS 下設為 true
+  //   sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
+  //   httpOnly: true,
+  //   path: '/'
+  // })
+
+  res.clearCookie(jwtName, {
+    // expires: expiresDate,
+    expires: new Date(0),
     secure: isSecure, // 僅在 HTTPS 下設為 true
     sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
     httpOnly: true,
