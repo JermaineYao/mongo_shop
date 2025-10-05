@@ -40,7 +40,7 @@ router.post('/sign_in_admin', user.signInAdmin)
 // 登出(前台)
 router.post('/sign_out', user.signout)
 // 登出(後台)
-router.get('/sign_out_admin', user.signoutAdmin)
+router.post('/sign_out_admin', user.signoutAdmin)
 
 // 檢查是否登入(前台)
 router.get('/is_login', user.isLogin)
