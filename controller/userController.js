@@ -567,7 +567,8 @@ function logout(req, res, reqFrom = 'front') {
     expires: expiresDate,
     secure: isSecure, // 僅在 HTTPS 下設為 true
     sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
-    httpOnly: true
+    httpOnly: true,
+    path: '/'
   })
 
   return res.status(200).json({ status: 'success', msg: '已登出' })
@@ -639,7 +640,8 @@ function setTokenInCookie(req, res, user, statusCode, msg, reqFrom = 'front') {
     expires: expiresDate,
     secure: isSecure, // 僅在 HTTPS 下設為 true
     sameSite: isSecure ? 'none' : 'lax', // 搭配 sameSite 切換
-    httpOnly: true
+    httpOnly: true,
+    path: '/'
   }
 
   const jwtName = reqFrom === 'front' ? 'shop-jwt' : 'shop-admin-jwt'
